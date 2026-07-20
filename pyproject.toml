@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "subtitle-translator"
+version = "0.1.0"
+description = "AI-powered subtitle translator."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+
+authors = [
+    { name = "Daniel Hofverberg" }
+]
+
+dependencies = [
+    "openai>=1.99",
+    "rich>=14",
+    "typer>=0.16",
+    "srt>=3.5",
+    "tenacity>=9",
+    "tqdm>=4.67"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.12"
+]
+
+[project.scripts]
+subtitle-translator = "subtitle_translator.cli:app"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
