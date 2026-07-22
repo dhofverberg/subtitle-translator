@@ -6,8 +6,15 @@ from typing import Any
 
 from openai import OpenAI
 
+from subtitle_translator.batch import (
+    BatchItem,
+    BatchProtocolError,
+    BatchTranslation,
+    parse_batch_response,
+    serialize_batch,
+)
 from subtitle_translator.config import load_config
-from subtitle_translator.prompts import build_prompt
+from subtitle_translator.prompts import build_batch_prompt, build_prompt
 
 from .base import TranslationProvider, TranslationRequest
 
@@ -39,3 +46,33 @@ class OpenAIProvider(TranslationProvider):
             raise OpenAIProviderError("OpenAI returned an empty translation.")
 
         return response.output_text
+
+    def translate_batch(
+        self,
+        items: list[BatchItem],
+        source_language: str,
+        target_language: str,
+    ) -> list[BatchTranslation]:
+        """Translate a batch using one OpenAI Responses API call."""
+
+        if not items:
+            raise ValueError("Translation batch must not be empty.")
+
+        response = self._client.responses.create(
+            model=self._model,
+            instructions=build_batch_prompt(
+                source_language=source_language,
+                target_language=target_language,
+            ),
+            input=serialize_batch(items),
+        )
+
+        try:
+            if not isinstance(response.output_text, str):
+                raise BatchProtocolError("Batch response output must be text.")
+
+            return parse_batch_response(response.output_text, items)
+        except BatchProtocolError as exc:
+            raise OpenAIProviderError(
+                f"OpenAI returned an invalid batch translation: {exc}"
+            ) from exc

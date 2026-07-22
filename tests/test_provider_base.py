@@ -2,6 +2,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from subtitle_translator.batch import BatchItem, BatchTranslation
 from subtitle_translator.providers import TranslationProvider, TranslationRequest
 from subtitle_translator.providers.base import (
     TranslationProvider as BaseTranslationProvider,
@@ -38,9 +39,22 @@ def test_translation_provider_can_be_implemented():
         def translate(self, request: TranslationRequest) -> str:
             return request.text
 
+        def translate_batch(
+            self,
+            items: list[BatchItem],
+            source_language: str,
+            target_language: str,
+        ) -> list[BatchTranslation]:
+            return [BatchTranslation(item.id, item.text) for item in items]
+
     request = TranslationRequest("Hello", "English", "Swedish")
 
     assert EchoProvider().translate(request) == "Hello"
+
+    items = [BatchItem(1, "Hello")]
+    assert EchoProvider().translate_batch(items, "English", "Swedish") == [
+        BatchTranslation(1, "Hello")
+    ]
 
 
 def test_provider_classes_are_exported_from_package():

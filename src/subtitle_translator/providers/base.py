@@ -5,6 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from subtitle_translator.batch import BatchItem, BatchTranslation
+
 
 @dataclass(frozen=True, slots=True)
 class TranslationRequest:
@@ -21,3 +23,12 @@ class TranslationProvider(ABC):
     @abstractmethod
     def translate(self, request: TranslationRequest) -> str:
         """Translate the supplied request and return the translated text."""
+
+    @abstractmethod
+    def translate_batch(
+        self,
+        items: list[BatchItem],
+        source_language: str,
+        target_language: str,
+    ) -> list[BatchTranslation]:
+        """Translate a batch of text items and return their translations."""

@@ -3,7 +3,13 @@ from typing import Any
 
 import pytest
 
-from subtitle_translator.prompts import build_prompt
+from subtitle_translator.batch import (
+    BatchItem,
+    BatchProtocolError,
+    BatchTranslation,
+    serialize_batch,
+)
+from subtitle_translator.prompts import build_batch_prompt, build_prompt
 from subtitle_translator.providers import (
     OpenAIProvider,
     OpenAIProviderError,
@@ -77,3 +83,75 @@ def test_provider_creates_default_openai_client(monkeypatch):
 
     assert result == "Hej"
     assert constructor_calls == [((), {})]
+
+
+def test_translate_batch_uses_one_call_and_restores_input_order():
+    client = FakeClient(
+        '[{"id": 3, "text": "Adjö"}, '
+        '{"id": 7, "text": "Hej\\nvärlden 👋"}]'
+    )
+    provider = OpenAIProvider(client=client, model="batch-model")
+    items = [
+        BatchItem(id=7, text="Hello\nworld 👋"),
+        BatchItem(id=3, text="Goodbye"),
+    ]
+
+    translations = provider.translate_batch(items, "English", "Swedish")
+
+    assert translations == [
+        BatchTranslation(id=7, text="Hej\nvärlden 👋"),
+        BatchTranslation(id=3, text="Adjö"),
+    ]
+    assert client.responses.calls == [
+        {
+            "model": "batch-model",
+            "instructions": build_batch_prompt("English", "Swedish"),
+            "input": serialize_batch(items),
+        }
+    ]
+    assert len(client.responses.calls) == 1
+
+
+def test_translate_batch_rejects_empty_input_without_api_call():
+    client = FakeClient("[]")
+    provider = OpenAIProvider(client=client, model="batch-model")
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        provider.translate_batch([], "English", "Swedish")
+
+    assert client.responses.calls == []
+
+
+@pytest.mark.parametrize(
+    "response_text",
+    [
+        "not JSON",
+        '[{"id": 1, "text": "Ett"}]',
+        (
+            '[{"id": 1, "text": "Ett"}, '
+            '{"id": 2, "text": "Två"}, '
+            '{"id": 3, "text": "Tre"}]'
+        ),
+        '[{"id": 1, "text": "Ett"}, {"id": 1, "text": "Ett igen"}]',
+        '[{"id": 1, "text": "Ett"}, {"id": 3, "text": "Tre"}]',
+        '[{"id": 1, "text": "Ett"}, {"id": 2, "text": "   "}]',
+    ],
+    ids=[
+        "invalid-json",
+        "missing-id",
+        "extra-id",
+        "duplicate-id",
+        "unknown-id",
+        "blank-text",
+    ],
+)
+def test_translate_batch_wraps_malformed_output(response_text):
+    client = FakeClient(response_text)
+    provider = OpenAIProvider(client=client, model="batch-model")
+    items = [BatchItem(1, "One"), BatchItem(2, "Two")]
+
+    with pytest.raises(OpenAIProviderError, match="invalid batch translation") as exc_info:
+        provider.translate_batch(items, "English", "Swedish")
+
+    assert isinstance(exc_info.value.__cause__, BatchProtocolError)
+    assert len(client.responses.calls) == 1
