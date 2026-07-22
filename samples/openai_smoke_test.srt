@@ -1,0 +1,16 @@
+10
+00:00:01,000 --> 00:00:03,000
+Hello, world! 👋
+
+20
+00:00:04,250 --> 00:00:07,000
+The café opens early.
+Please bring your résumé.
+
+35
+00:00:08,500 --> 00:00:11,000
+A quiet robot counts: 1, 2, 3.
+
+50
+00:00:12,750 --> 00:00:15,500
+Good night — see you tomorrow.

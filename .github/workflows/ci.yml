@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install project and development dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run Ruff
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      - name: Verify distribution contents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          sdist = next(Path("dist").glob("*.tar.gz"))
+
+          with zipfile.ZipFile(wheel) as archive:
+              wheel_files = set(archive.namelist())
+
+          with tarfile.open(sdist, "r:gz") as archive:
+              sdist_files = set(archive.getnames())
+
+          required_package_files = (
+              "subtitle_translator/resources/prompt.txt",
+              "subtitle_translator/resources/batch_prompt.txt",
+          )
+
+          for required in required_package_files:
+              assert required in wheel_files, f"{required} missing from wheel"
+              assert any(
+                  name.endswith(f"/src/{required}") for name in sdist_files
+              ), f"{required} missing from source distribution"
+
+          assert any(
+              name.endswith(".dist-info/licenses/LICENSE") for name in wheel_files
+          ), "LICENSE missing from wheel"
+          assert any(
+              name.count("/") == 1 and name.endswith("/LICENSE")
+              for name in sdist_files
+          ), "LICENSE missing from source distribution"
+          PY
+
+      - name: Verify installed wheel outside source tree
+        run: |
+          verification_env="$RUNNER_TEMP/subtitle-translator-wheel-${{ matrix.python-version }}"
+          python -m venv "$verification_env"
+          "$verification_env/bin/python" -m pip install dist/*.whl
+
+          cd "$RUNNER_TEMP"
+          PYTHONPATH= "$verification_env/bin/python" - <<'PY'
+          import os
+          from importlib.metadata import version
+          from importlib.resources import files
+          from pathlib import Path
+
+          import subtitle_translator
+
+          package_path = Path(subtitle_translator.__file__).resolve()
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          assert not package_path.is_relative_to(workspace), package_path
+
+          resources = files("subtitle_translator").joinpath("resources")
+          assert resources.joinpath("prompt.txt").read_text(encoding="utf-8")
+          assert resources.joinpath("batch_prompt.txt").read_text(encoding="utf-8")
+          assert version("subtitle-translator") == subtitle_translator.__version__
+          PY
+
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" --help

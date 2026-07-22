@@ -33,3 +33,6 @@ Thumbs.db
 
 # Local configuration
 .env
+
+# Manual smoke-test output
+/samples/*.translated.srt
