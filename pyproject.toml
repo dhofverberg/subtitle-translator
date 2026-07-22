@@ -39,7 +39,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-subtitle_translator = ["resources/*.txt"]
+subtitle_translator = ["resources/*", "resources/**/*"]
 
 [tool.ruff]
 line-length = 100
