@@ -47,6 +47,6 @@ def save_srt(subtitle_file: SubtitleFile, filename: str | Path) -> None:
             )
         )
 
-    text = srt.compose(output)
+    text = srt.compose(output, reindex=False)
 
     Path(filename).write_text(text, encoding="utf-8")
