@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+from typer.testing import CliRunner
+
+from subtitle_translator.cli import app
+from subtitle_translator.config import Config
+
+runner = CliRunner()
+
+
+def write_input(path: Path) -> None:
+    path.write_text(
+        """1
+00:00:01,000 --> 00:00:02,000
+Hello
+""",
+        encoding="utf-8",
+    )
+
+
+def install_cli_fakes(
+    monkeypatch,
+    *,
+    error: Exception | None = None,
+    api_key: str = "sk-test-secret",
+):
+    providers: list[tuple[str | None, object]] = []
+    calls: list[dict[str, Any]] = []
+
+    def create_provider(*, model: str | None = None) -> object:
+        provider = object()
+        providers.append((model, provider))
+        return provider
+
+    def fake_translate_srt_file(**kwargs: Any) -> None:
+        calls.append(kwargs)
+        if error is not None:
+            raise error
+        kwargs["output_path"].write_text("translated", encoding="utf-8")
+
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIProvider", create_provider)
+    monkeypatch.setattr("subtitle_translator.cli.translate_srt_file", fake_translate_srt_file)
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key=api_key, openai_model="configured-model"),
+    )
+    return providers, calls
+
+
+def test_cli_requires_input_path():
+    result = runner.invoke(app, [])
+
+    assert result.exit_code != 0
+    assert "Missing argument" in result.output
+
+
+def test_cli_rejects_missing_input_file(tmp_path: Path):
+    result = runner.invoke(app, [str(tmp_path / "missing.srt")])
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+def test_cli_uses_explicit_output_and_shows_success(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "custom.srt"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--output", str(output_path)],
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["input_path"] == input_path
+    assert calls[0]["output_path"] == output_path
+    assert f"Translation complete: {output_path}" in result.output
+
+
+def test_cli_derives_safe_output_path(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code == 0
+    assert calls[0]["output_path"] == tmp_path / "movie.translated.srt"
+    assert calls[0]["output_path"] != input_path
+    assert providers[0][0] == "configured-model"
+
+
+def test_cli_forwards_languages_batch_size_and_model(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [
+            str(input_path),
+            "--source-language",
+            "German",
+            "--target-language",
+            "Swedish",
+            "--batch-size",
+            "7",
+            "--model",
+            "override-model",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert providers[0][0] == "override-model"
+    assert calls[0]["provider"] is providers[0][1]
+    assert calls[0]["source_language"] == "German"
+    assert calls[0]["target_language"] == "Swedish"
+    assert calls[0]["batch_size"] == 7
+
+
+def test_cli_rejects_invalid_batch_size_before_translation(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(app, [str(input_path), "--batch-size", "0"])
+
+    assert result.exit_code != 0
+    assert "batch-size must be greater than zero" in result.output
+    assert providers == []
+    assert calls == []
+
+
+def test_cli_rejects_existing_derived_output(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "movie.translated.srt"
+    write_input(input_path)
+    output_path.write_text("existing", encoding="utf-8")
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code != 0
+    assert "Output file already exists" in result.output
+    assert output_path.read_text(encoding="utf-8") == "existing"
+    assert providers == []
+    assert calls == []
+
+
+def test_cli_rejects_identical_input_and_output(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    original = input_path.read_bytes()
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(app, [str(input_path), "-o", str(input_path)])
+
+    assert result.exit_code != 0
+    assert "Input and output paths must be different" in result.output
+    assert input_path.read_bytes() == original
+    assert providers == []
+    assert calls == []
+
+
+def test_cli_reports_provider_creation_errors(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_model="configured-model"),
+    )
+
+    def fail_provider(*, model: str | None = None) -> object:
+        raise RuntimeError("Provider unavailable")
+
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIProvider", fail_provider)
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code != 0
+    assert "Translation failed: Provider unavailable" in result.output
+
+
+def test_cli_redacts_api_key_from_application_errors(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    secret = "sk-super-secret-value"
+    _, calls = install_cli_fakes(
+        monkeypatch,
+        error=RuntimeError(f"Request failed using {secret}"),
+        api_key=secret,
+    )
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code != 0
+    assert "Translation failed: Request failed using [REDACTED]" in result.output
+    assert secret not in result.output
+    assert len(calls) == 1
