@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from openai import OpenAIError
 
 from subtitle_translator.batch import (
     BatchItem,
@@ -30,6 +31,14 @@ class FakeResponses:
 class FakeClient:
     def __init__(self, output_text: str) -> None:
         self.responses = FakeResponses(output_text)
+
+
+class FailingResponses:
+    def __init__(self, error: OpenAIError) -> None:
+        self.error = error
+
+    def create(self, **kwargs: Any) -> SimpleNamespace:
+        raise self.error
 
 
 def test_translate_uses_responses_api_with_configured_model(monkeypatch):
@@ -83,6 +92,54 @@ def test_provider_creates_default_openai_client(monkeypatch):
 
     assert result == "Hej"
     assert constructor_calls == [((), {})]
+
+
+def test_provider_wraps_openai_client_initialization_errors(monkeypatch):
+    error = OpenAIError("secret initialization detail")
+
+    def fail_openai() -> None:
+        raise error
+
+    monkeypatch.setattr(
+        "subtitle_translator.providers.openai_provider.OpenAI",
+        fail_openai,
+    )
+
+    with pytest.raises(
+        OpenAIProviderError,
+        match="OpenAI client initialization failed",
+    ) as exc_info:
+        OpenAIProvider(model="explicit-model")
+
+    assert exc_info.value.__cause__ is error
+    assert "secret initialization detail" not in str(exc_info.value)
+
+
+def test_translate_wraps_openai_sdk_errors():
+    error = OpenAIError("Authorization: Bearer secret")
+    client = SimpleNamespace(responses=FailingResponses(error))
+    provider = OpenAIProvider(client=client, model="explicit-model")
+
+    with pytest.raises(OpenAIProviderError, match="OpenAI translation request failed") as exc_info:
+        provider.translate(TranslationRequest("Hello", "English", "Swedish"))
+
+    assert exc_info.value.__cause__ is error
+    assert "secret" not in str(exc_info.value)
+
+
+def test_translate_batch_wraps_openai_sdk_errors():
+    error = OpenAIError("Authorization: Bearer secret")
+    client = SimpleNamespace(responses=FailingResponses(error))
+    provider = OpenAIProvider(client=client, model="explicit-model")
+
+    with pytest.raises(
+        OpenAIProviderError,
+        match="OpenAI batch translation request failed",
+    ) as exc_info:
+        provider.translate_batch([BatchItem(1, "Hello")], "English", "Swedish")
+
+    assert exc_info.value.__cause__ is error
+    assert "secret" not in str(exc_info.value)
 
 
 def test_translate_batch_uses_one_call_and_restores_input_order():

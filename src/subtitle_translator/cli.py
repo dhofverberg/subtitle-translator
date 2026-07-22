@@ -1,11 +1,14 @@
 from pathlib import Path
+from typing import NoReturn
 
-import click
+import srt
 import typer
 
-from .app import translate_srt_file
-from .config import Config, load_config
-from .providers.openai_provider import OpenAIProvider
+from .app import TranslationInputError, translate_srt_file
+from .batch import BatchProtocolError
+from .config import load_config
+from .providers.openai_provider import OpenAIProvider, OpenAIProviderError
+from .subtitle_translation import SubtitleTranslationError
 
 DEFAULT_SOURCE_LANGUAGE = "English"
 DEFAULT_TARGET_LANGUAGE = "Swedish"
@@ -15,6 +18,11 @@ app = typer.Typer(
     add_completion=False,
     help="AI-powered subtitle translator."
 )
+
+
+def _fail(message: str) -> NoReturn:
+    typer.echo(f"Error: {message}", err=True)
+    raise typer.Exit(code=1)
 
 
 @app.command()
@@ -57,18 +65,16 @@ def main(
     """Translate a subtitle file."""
 
     if batch_size <= 0:
-        raise click.ClickException("batch-size must be greater than zero.")
+        _fail("batch-size must be greater than zero.")
 
     output_path = output or input_path.with_name(f"{input_path.stem}.translated.srt")
 
-    if input_path.resolve() == output_path.resolve():
-        raise click.ClickException("Input and output paths must be different.")
-    if output_path.exists():
-        raise click.ClickException(f"Output file already exists: {output_path}")
-
-    config: Config | None = None
-
     try:
+        if input_path.resolve() == output_path.resolve():
+            _fail("Input and output paths must be different.")
+        if output_path.exists():
+            _fail(f"Output file already exists: {output_path}")
+
         config = load_config()
         provider = OpenAIProvider(model=model or config.openai_model)
         translate_srt_file(
@@ -79,10 +85,19 @@ def main(
             target_language=target_language,
             batch_size=batch_size,
         )
-    except Exception as exc:
-        message = str(exc).strip() or type(exc).__name__
-        if config is not None and config.openai_api_key:
-            message = message.replace(config.openai_api_key, "[REDACTED]")
-        raise click.ClickException(f"Translation failed: {message}") from exc
+    except OpenAIProviderError:
+        _fail("Translation provider failed.")
+    except (BatchProtocolError, SubtitleTranslationError) as exc:
+        _fail(f"Invalid translation response: {_error_message(exc)}")
+    except (srt.SRTParseError, srt.TimestampParseError) as exc:
+        _fail(f"Invalid SRT file: {_error_message(exc)}")
+    except OSError as exc:
+        _fail(f"File operation failed: {_error_message(exc)}")
+    except TranslationInputError as exc:
+        _fail(f"Invalid input: {_error_message(exc)}")
 
     typer.echo(f"Translation complete: {output_path}")
+
+
+def _error_message(exc: Exception) -> str:
+    return str(exc).strip() or type(exc).__name__

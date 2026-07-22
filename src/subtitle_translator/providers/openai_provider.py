@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 
 from subtitle_translator.batch import (
     BatchItem,
@@ -27,20 +27,26 @@ class OpenAIProvider(TranslationProvider):
     """Translate text using the OpenAI Responses API."""
 
     def __init__(self, client: Any | None = None, model: str | None = None) -> None:
-        self._client = client if client is not None else OpenAI()
+        try:
+            self._client = client if client is not None else OpenAI()
+        except OpenAIError as exc:
+            raise OpenAIProviderError("OpenAI client initialization failed.") from exc
         self._model = model if model is not None else load_config().openai_model
 
     def translate(self, request: TranslationRequest) -> str:
         """Translate text using the configured OpenAI model."""
 
-        response = self._client.responses.create(
-            model=self._model,
-            instructions=build_prompt(
-                source_language=request.source_language,
-                target_language=request.target_language,
-            ),
-            input=request.text,
-        )
+        try:
+            response = self._client.responses.create(
+                model=self._model,
+                instructions=build_prompt(
+                    source_language=request.source_language,
+                    target_language=request.target_language,
+                ),
+                input=request.text,
+            )
+        except OpenAIError as exc:
+            raise OpenAIProviderError("OpenAI translation request failed.") from exc
 
         if not response.output_text or not response.output_text.strip():
             raise OpenAIProviderError("OpenAI returned an empty translation.")
@@ -58,14 +64,17 @@ class OpenAIProvider(TranslationProvider):
         if not items:
             raise ValueError("Translation batch must not be empty.")
 
-        response = self._client.responses.create(
-            model=self._model,
-            instructions=build_batch_prompt(
-                source_language=source_language,
-                target_language=target_language,
-            ),
-            input=serialize_batch(items),
-        )
+        try:
+            response = self._client.responses.create(
+                model=self._model,
+                instructions=build_batch_prompt(
+                    source_language=source_language,
+                    target_language=target_language,
+                ),
+                input=serialize_batch(items),
+            )
+        except OpenAIError as exc:
+            raise OpenAIProviderError("OpenAI batch translation request failed.") from exc
 
         try:
             if not isinstance(response.output_text, str):

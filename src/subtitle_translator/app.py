@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from rich.console import Console
-
 from .providers.base import TranslationProvider
 from .srt import load_srt, save_srt
 from .subtitle_translation import SubtitleTranslationService
 
-console = Console()
+
+class TranslationInputError(ValueError):
+    """Raised when application translation inputs are invalid."""
 
 
 def translate_srt_file(
@@ -20,7 +20,7 @@ def translate_srt_file(
     """Load, translate, and save an SRT subtitle file."""
 
     if input_path.resolve() == output_path.resolve():
-        raise ValueError("Input and output paths must be different.")
+        raise TranslationInputError("Input and output paths must be different.")
 
     subtitle_file = load_srt(input_path)
     service = SubtitleTranslationService(
@@ -31,17 +31,3 @@ def translate_srt_file(
     )
     translated_file = service.translate(subtitle_file)
     save_srt(translated_file, output_path)
-
-
-def translate_file(path: Path) -> None:
-    """Temporary implementation."""
-
-    console.print()
-
-    console.print("[bold green]Subtitle Translator[/bold green]")
-
-    console.print(f"Input file : {path}")
-
-    console.print()
-
-    console.print("[yellow]Translation engine not implemented yet.[/yellow]")

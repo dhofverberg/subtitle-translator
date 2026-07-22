@@ -17,11 +17,8 @@ authors = [
 
 dependencies = [
     "openai>=1.99",
-    "rich>=14",
     "typer>=0.16",
-    "srt>=3.5",
-    "tenacity>=9",
-    "tqdm>=4.67"
+    "srt>=3.5"
 ]
 
 [project.optional-dependencies]

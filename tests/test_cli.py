@@ -3,10 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+import srt
 from typer.testing import CliRunner
 
+from subtitle_translator.app import TranslationInputError
+from subtitle_translator.batch import BatchProtocolError
 from subtitle_translator.cli import app
 from subtitle_translator.config import Config
+from subtitle_translator.providers.openai_provider import OpenAIProviderError
+from subtitle_translator.subtitle_translation import SubtitleTranslationError
 
 runner = CliRunner()
 
@@ -24,7 +30,7 @@ Hello
 def install_cli_fakes(
     monkeypatch,
     *,
-    error: Exception | None = None,
+    error: BaseException | None = None,
     api_key: str = "sk-test-secret",
 ):
     providers: list[tuple[str | None, object]] = []
@@ -166,38 +172,130 @@ def test_cli_rejects_identical_input_and_output(monkeypatch, tmp_path: Path):
     assert calls == []
 
 
-def test_cli_reports_provider_creation_errors(monkeypatch, tmp_path: Path):
+def test_cli_reports_provider_creation_errors_without_details(monkeypatch, tmp_path: Path):
     input_path = tmp_path / "movie.srt"
     write_input(input_path)
+    secret = "sk-provider-secret"
     monkeypatch.setattr(
         "subtitle_translator.cli.load_config",
-        lambda: Config(openai_model="configured-model"),
+        lambda: Config(openai_api_key=secret, openai_model="configured-model"),
     )
 
     def fail_provider(*, model: str | None = None) -> object:
-        raise RuntimeError("Provider unavailable")
+        raise OpenAIProviderError(
+            f"Authorization: Bearer {secret}; complete configuration follows"
+        )
 
     monkeypatch.setattr("subtitle_translator.cli.OpenAIProvider", fail_provider)
 
     result = runner.invoke(app, [str(input_path)])
 
     assert result.exit_code != 0
-    assert "Translation failed: Provider unavailable" in result.output
+    assert "Translation provider failed" in result.output
+    assert secret not in result.output
+    assert "Authorization" not in result.output
+    assert "configuration" not in result.output
 
 
-def test_cli_redacts_api_key_from_application_errors(monkeypatch, tmp_path: Path):
+def test_cli_hides_sensitive_provider_application_errors(monkeypatch, tmp_path: Path):
     input_path = tmp_path / "movie.srt"
     write_input(input_path)
     secret = "sk-super-secret-value"
     _, calls = install_cli_fakes(
         monkeypatch,
-        error=RuntimeError(f"Request failed using {secret}"),
+        error=OpenAIProviderError(f"Authorization: Bearer {secret}"),
         api_key=secret,
     )
 
     result = runner.invoke(app, [str(input_path)])
 
     assert result.exit_code != 0
-    assert "Translation failed: Request failed using [REDACTED]" in result.output
+    assert "Translation provider failed" in result.output
     assert secret not in result.output
+    assert "Authorization" not in result.output
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_message"),
+    [
+        (PermissionError("access denied"), "File operation failed: access denied"),
+        (
+            srt.SRTParseError(1, 2, "malformed subtitle"),
+            "Invalid SRT file:",
+        ),
+        (
+            srt.TimestampParseError("invalid timestamp"),
+            "Invalid SRT file: invalid timestamp",
+        ),
+        (
+            BatchProtocolError("invalid JSON"),
+            "Invalid translation response: invalid JSON",
+        ),
+        (
+            SubtitleTranslationError("missing translation ID"),
+            "Invalid translation response: missing translation ID",
+        ),
+        (
+            TranslationInputError("invalid language"),
+            "Invalid input: invalid language",
+        ),
+    ],
+    ids=[
+        "filesystem",
+        "srt-parsing",
+        "srt-serialization",
+        "batch-protocol",
+        "translation-contract",
+        "input-validation",
+    ],
+)
+def test_cli_reports_expected_application_errors(
+    monkeypatch,
+    tmp_path: Path,
+    error: Exception,
+    expected_message: str,
+):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch, error=error)
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code != 0
+    assert expected_message in result.output
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [RuntimeError("runtime defect"), ValueError("value defect")],
+    ids=["runtime-error", "value-error"],
+)
+def test_cli_does_not_rewrite_unexpected_programming_errors(
+    monkeypatch,
+    tmp_path: Path,
+    error: Exception,
+):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    install_cli_fakes(monkeypatch, error=error)
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code != 0
+    assert result.exception is error
+    assert "Translation failed" not in result.output
+    assert str(error) not in result.output
+
+
+def test_cli_does_not_catch_keyboard_interrupt(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    install_cli_fakes(monkeypatch, error=KeyboardInterrupt())
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code != 0
+    assert "Translation failed" not in result.output
+    assert "Translation provider failed" not in result.output
