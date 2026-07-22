@@ -117,6 +117,28 @@ def test_translate_srt_file_rejects_identical_paths(tmp_path: Path):
     assert provider.calls == []
 
 
+def test_translate_srt_file_does_not_overwrite_existing_output(tmp_path: Path):
+    input_path = tmp_path / "input.srt"
+    output_path = tmp_path / "output.srt"
+    write_input_srt(input_path)
+    original_input = input_path.read_bytes()
+    output_path.write_text("existing output", encoding="utf-8")
+    provider = FakeProvider()
+
+    with pytest.raises(FileExistsError):
+        translate_srt_file(
+            input_path,
+            output_path,
+            provider,
+            "English",
+            "Swedish",
+            batch_size=2,
+        )
+
+    assert input_path.read_bytes() == original_input
+    assert output_path.read_text(encoding="utf-8") == "existing output"
+
+
 def test_translate_srt_file_propagates_provider_exceptions(tmp_path: Path):
     input_path = tmp_path / "input.srt"
     output_path = tmp_path / "output.srt"

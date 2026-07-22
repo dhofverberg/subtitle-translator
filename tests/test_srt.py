@@ -1,6 +1,8 @@
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
+
 from subtitle_translator.models import Subtitle, SubtitleFile
 from subtitle_translator.srt import load_srt, save_srt
 
@@ -52,3 +54,28 @@ def test_roundtrip_preserves_non_sequential_indices(tmp_path: Path):
         assert actual.start == expected.start
         assert actual.end == expected.end
         assert actual.text == expected.text
+
+
+def test_save_srt_does_not_overwrite_existing_file(tmp_path: Path):
+    output = tmp_path / "existing.srt"
+    output.write_text("existing contents", encoding="utf-8")
+    subtitle_file = SubtitleFile(
+        [Subtitle(1, timedelta(seconds=1), timedelta(seconds=2), "Replacement")]
+    )
+
+    with pytest.raises(FileExistsError):
+        save_srt(subtitle_file, output)
+
+    assert output.read_text(encoding="utf-8") == "existing contents"
+
+
+def test_save_srt_can_overwrite_when_explicitly_requested(tmp_path: Path):
+    output = tmp_path / "existing.srt"
+    output.write_text("existing contents", encoding="utf-8")
+    subtitle_file = SubtitleFile(
+        [Subtitle(1, timedelta(seconds=1), timedelta(seconds=2), "Replacement")]
+    )
+
+    save_srt(subtitle_file, output, overwrite=True)
+
+    assert load_srt(output) == subtitle_file
