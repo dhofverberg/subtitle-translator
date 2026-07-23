@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from openai import OpenAI, OpenAIError
@@ -14,6 +15,11 @@ from subtitle_translator.batch import (
     serialize_batch,
 )
 from subtitle_translator.config import load_config
+from subtitle_translator.glossary import (
+    Glossary,
+    glossary_to_dict,
+    validate_glossary_languages,
+)
 from subtitle_translator.prompts import build_batch_prompt, build_prompt
 
 from .base import TranslationProvider, TranslationRequest
@@ -58,11 +64,18 @@ class OpenAIProvider(TranslationProvider):
         items: list[BatchItem],
         source_language: str,
         target_language: str,
+        glossary: Glossary | None = None,
     ) -> list[BatchTranslation]:
         """Translate a batch using one OpenAI Responses API call."""
 
         if not items:
             raise ValueError("Translation batch must not be empty.")
+        if glossary is not None:
+            validate_glossary_languages(
+                glossary,
+                source_language,
+                target_language,
+            )
 
         try:
             response = self._client.responses.create(
@@ -71,7 +84,7 @@ class OpenAIProvider(TranslationProvider):
                     source_language=source_language,
                     target_language=target_language,
                 ),
-                input=serialize_batch(items),
+                input=_serialize_batch_input(items, glossary),
             )
         except OpenAIError as exc:
             raise OpenAIProviderError("OpenAI batch translation request failed.") from exc
@@ -85,3 +98,20 @@ class OpenAIProvider(TranslationProvider):
             raise OpenAIProviderError(
                 f"OpenAI returned an invalid batch translation: {exc}"
             ) from exc
+
+
+def _serialize_batch_input(
+    items: list[BatchItem],
+    glossary: Glossary | None,
+) -> str:
+    if glossary is None:
+        return serialize_batch(items)
+
+    payload = {
+        "glossary": glossary_to_dict(glossary),
+        "subtitle_items": [
+            {"id": item.id, "text": item.text}
+            for item in items
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False)

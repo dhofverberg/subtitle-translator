@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -126,6 +127,118 @@ def test_cli_forwards_languages_batch_size_and_model(monkeypatch, tmp_path: Path
     assert calls[0]["source_language"] == "German"
     assert calls[0]["target_language"] == "Swedish"
     assert calls[0]["batch_size"] == 7
+    assert calls[0]["glossary"] is None
+
+
+def test_cli_loads_and_forwards_valid_glossary(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    glossary_path = tmp_path / "glossary.json"
+    write_input(input_path)
+    glossary_path.write_text(
+        json.dumps(
+            {
+                "source_language": "English",
+                "target_language": "Swedish",
+                "terms": [
+                    {"source": "warp drive", "target": "warpdrift"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--glossary", str(glossary_path)],
+    )
+
+    assert result.exit_code == 0
+    assert len(providers) == 1
+    assert calls[0]["glossary"].source_language == "English"
+    assert calls[0]["glossary"].target_language == "Swedish"
+    assert calls[0]["glossary"].terms[0].source == "warp drive"
+    assert calls[0]["glossary"].terms[0].target == "warpdrift"
+
+
+def test_cli_rejects_missing_glossary_file_before_provider_creation(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--glossary", str(tmp_path / "missing.json")],
+    )
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+    assert providers == []
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ("{not JSON", "Invalid glossary JSON"),
+        (
+            json.dumps(
+                {
+                    "source_language": "German",
+                    "target_language": "Swedish",
+                    "terms": [],
+                }
+            ),
+            "source language",
+        ),
+        (
+            json.dumps(
+                {
+                    "source_language": "English",
+                    "target_language": "Swedish",
+                    "terms": [
+                        {"source": "Warp Drive", "target": "warpdrift"},
+                        {"source": " warp drive ", "target": "annan term"},
+                    ],
+                }
+            ),
+            "Duplicate glossary source term",
+        ),
+    ],
+    ids=["invalid-json", "language-mismatch", "duplicate-source"],
+)
+def test_cli_rejects_invalid_glossary_before_provider_request(
+    monkeypatch,
+    tmp_path: Path,
+    payload: str,
+    message: str,
+):
+    input_path = tmp_path / "movie.srt"
+    glossary_path = tmp_path / "glossary.json"
+    write_input(input_path)
+    glossary_path.write_text(payload, encoding="utf-8")
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--glossary", str(glossary_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid glossary" in result.output
+    assert message in result.output
+    assert providers == []
+    assert calls == []
+
+
+def test_cli_help_documents_glossary_option():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "--glossary" in result.output
 
 
 def test_cli_rejects_invalid_batch_size_before_translation(monkeypatch, tmp_path: Path):

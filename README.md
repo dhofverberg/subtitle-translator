@@ -9,7 +9,6 @@ AI-powered subtitle translation for SRT files using OpenAI and other LLM provide
 - OpenAI GPT-5.5 support
 - Batch translation
 - Resume after interruption
-- Translation glossary
 - Quality Check pass
 - Multiple AI providers
 - Rich command-line interface
@@ -46,6 +45,35 @@ python -m pip install -e ".[dev]"
 subtitle-translator --help
 ```
 
+## Glossaries
+
+Use `--glossary PATH` to supply approved source-to-target terminology as a
+UTF-8 JSON file:
+
+~~~json
+{
+  "source_language": "English",
+  "target_language": "Swedish",
+  "terms": [
+    {
+      "source": "warp drive",
+      "target": "warpdrift"
+    }
+  ]
+}
+~~~
+
+The glossary languages must match the CLI source and target languages. Glossary
+entries guide the model toward consistent terminology; they are not literal
+search-and-replace rules, so normal grammar and inflection still apply.
+
+The repository includes `samples/glossary.en-sv.json`. Use it with the sample
+subtitles:
+
+~~~bash
+subtitle-translator samples/openai_smoke_test.srt --source-language English --target-language Swedish --glossary samples/glossary.en-sv.json
+~~~
+
 ## Manual OpenAI smoke test
 
 Set your OpenAI API key in the shell. You can optionally override the default
@@ -65,7 +93,8 @@ $env:OPENAI_API_KEY = "your_api_key_here"
 $env:OPENAI_MODEL = "gpt-5.5"  # Optional
 ~~~
 
-Translate the included sample from English to Swedish:
+Translate the included sample from English to Swedish, optionally adding
+`--glossary samples/glossary.en-sv.json`:
 
 ~~~bash
 subtitle-translator samples/openai_smoke_test.srt --source-language English --target-language Swedish

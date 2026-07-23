@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from subtitle_translator.batch import BatchItem, BatchTranslation
+from subtitle_translator.glossary import Glossary, validate_glossary_languages
 from subtitle_translator.models import Subtitle, SubtitleFile
 from subtitle_translator.providers.base import TranslationProvider
 
@@ -20,6 +21,7 @@ class SubtitleTranslationService:
         source_language: str,
         target_language: str,
         batch_size: int,
+        glossary: Glossary | None = None,
     ) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be greater than zero.")
@@ -28,6 +30,10 @@ class SubtitleTranslationService:
         self._source_language = source_language
         self._target_language = target_language
         self._batch_size = batch_size
+        self._glossary = glossary
+
+        if glossary is not None:
+            validate_glossary_languages(glossary, source_language, target_language)
 
     def translate(self, subtitle_file: SubtitleFile) -> SubtitleFile:
         """Translate every subtitle and return a new subtitle file."""
@@ -41,6 +47,7 @@ class SubtitleTranslationService:
                 items=items,
                 source_language=self._source_language,
                 target_language=self._target_language,
+                glossary=self._glossary,
             )
             translations_by_id = self._validate_translations(items, translations)
 

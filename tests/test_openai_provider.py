@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -10,6 +11,7 @@ from subtitle_translator.batch import (
     BatchTranslation,
     serialize_batch,
 )
+from subtitle_translator.glossary import Glossary, GlossaryError, GlossaryTerm
 from subtitle_translator.prompts import build_batch_prompt, build_prompt
 from subtitle_translator.providers import (
     OpenAIProvider,
@@ -167,6 +169,57 @@ def test_translate_batch_uses_one_call_and_restores_input_order():
         }
     ]
     assert len(client.responses.calls) == 1
+
+
+def test_translate_batch_includes_complete_glossary_in_every_request():
+    client = FakeClient('[{"id": 1, "text": "Starta warpdriften."}]')
+    provider = OpenAIProvider(client=client, model="batch-model")
+    items = [BatchItem(1, "Engage the warp drive.")]
+    glossary = Glossary(
+        source_language="English",
+        target_language="Swedish",
+        terms=(
+            GlossaryTerm("warp drive", "warpdrift"),
+            GlossaryTerm("crew", "besättning"),
+        ),
+    )
+
+    first = provider.translate_batch(items, "English", "Swedish", glossary)
+    second = provider.translate_batch(items, "English", "Swedish", glossary)
+
+    assert first == second == [BatchTranslation(1, "Starta warpdriften.")]
+    assert len(client.responses.calls) == 2
+    for call in client.responses.calls:
+        assert json.loads(call["input"]) == {
+            "glossary": {
+                "source_language": "English",
+                "target_language": "Swedish",
+                "terms": [
+                    {"source": "warp drive", "target": "warpdrift"},
+                    {"source": "crew", "target": "besättning"},
+                ],
+            },
+            "subtitle_items": [
+                {"id": 1, "text": "Engage the warp drive."},
+            ],
+        }
+        assert call["instructions"] == build_batch_prompt("English", "Swedish")
+
+
+def test_translate_batch_rejects_glossary_language_mismatch_without_api_call():
+    client = FakeClient("[]")
+    provider = OpenAIProvider(client=client, model="batch-model")
+    glossary = Glossary("German", "Swedish", ())
+
+    with pytest.raises(GlossaryError, match="source language"):
+        provider.translate_batch(
+            [BatchItem(1, "Hello")],
+            "English",
+            "Swedish",
+            glossary,
+        )
+
+    assert client.responses.calls == []
 
 
 def test_translate_batch_rejects_empty_input_without_api_call():

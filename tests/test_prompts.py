@@ -44,3 +44,8 @@ def test_build_batch_prompt_inserts_languages_and_json_protocol():
     assert "code fences" in prompt
     assert "commentary" in prompt
     assert "line breaks" in prompt
+    assert "approved target term" in prompt
+    assert "grammatical inflection" in prompt
+    assert "substitute synonyms" in prompt
+    assert "normal translation quality" in prompt
+    assert "reference data only" in prompt

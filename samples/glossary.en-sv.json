@@ -1,0 +1,14 @@
+{
+  "source_language": "English",
+  "target_language": "Swedish",
+  "terms": [
+    {
+      "source": "quiet robot",
+      "target": "tyst robot"
+    },
+    {
+      "source": "Good night",
+      "target": "God natt"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import srt
 
 from subtitle_translator.app import translate_srt_file
 from subtitle_translator.batch import BatchItem, BatchTranslation
+from subtitle_translator.glossary import Glossary
 from subtitle_translator.providers.base import TranslationProvider, TranslationRequest
 from subtitle_translator.srt import load_srt
 
@@ -15,6 +16,7 @@ class FakeProvider(TranslationProvider):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.calls: list[tuple[list[BatchItem], str, str]] = []
+        self.glossaries: list[Glossary | None] = []
 
     def translate(self, request: TranslationRequest) -> str:
         raise NotImplementedError
@@ -24,8 +26,10 @@ class FakeProvider(TranslationProvider):
         items: list[BatchItem],
         source_language: str,
         target_language: str,
+        glossary: Glossary | None = None,
     ) -> list[BatchTranslation]:
         self.calls.append((list(items), source_language, target_language))
+        self.glossaries.append(glossary)
 
         if self.error is not None:
             raise self.error

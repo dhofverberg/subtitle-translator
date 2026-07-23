@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 
 from subtitle_translator.batch import BatchItem, BatchTranslation
 from subtitle_translator.cli import app
+from subtitle_translator.glossary import Glossary
 from subtitle_translator.providers.base import TranslationProvider, TranslationRequest
 from subtitle_translator.srt import load_srt
 
@@ -14,6 +15,7 @@ from subtitle_translator.srt import load_srt
 class FakeProvider(TranslationProvider):
     def __init__(self) -> None:
         self.calls: list[tuple[list[BatchItem], str, str]] = []
+        self.glossaries: list[Glossary | None] = []
 
     def translate(self, request: TranslationRequest) -> str:
         raise NotImplementedError
@@ -23,8 +25,10 @@ class FakeProvider(TranslationProvider):
         items: list[BatchItem],
         source_language: str,
         target_language: str,
+        glossary: Glossary | None = None,
     ) -> list[BatchTranslation]:
         self.calls.append((list(items), source_language, target_language))
+        self.glossaries.append(glossary)
         return [
             BatchTranslation(item.id, f"Översatt: {item.text}")
             for item in items
@@ -98,3 +102,59 @@ Café 👋
         "Översatt: Hello\nworld",
         "Översatt: Café 👋",
     ]
+    assert provider.glossaries == [None, None]
+
+
+def test_cli_runs_complete_translation_flow_with_glossary(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "translated.srt"
+    glossary_path = tmp_path / "glossary.json"
+    input_path.write_text(
+        """10
+00:00:01,000 --> 00:00:03,000
+Engage the warp drive.
+
+20
+00:00:04,000 --> 00:00:06,000
+Warp drive ready.
+""",
+        encoding="utf-8",
+    )
+    glossary_path.write_text(
+        """{
+  "source_language": "English",
+  "target_language": "Swedish",
+  "terms": [{"source": "warp drive", "target": "warpdrift"}]
+}""",
+        encoding="utf-8",
+    )
+    provider = FakeProvider()
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIProvider",
+        lambda *, model=None: provider,
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--glossary",
+            str(glossary_path),
+            "--batch-size",
+            "1",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert output_path.exists()
+    assert len(provider.glossaries) == 2
+    assert all(glossary is not None for glossary in provider.glossaries)
+    assert provider.glossaries[0] == provider.glossaries[1]
+    assert provider.glossaries[0].terms[0].target == "warpdrift"
+    assert [subtitle.index for subtitle in load_srt(output_path).subtitles] == [10, 20]

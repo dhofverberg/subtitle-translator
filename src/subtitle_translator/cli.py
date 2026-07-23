@@ -7,6 +7,7 @@ import typer
 from .app import TranslationInputError, translate_srt_file
 from .batch import BatchProtocolError
 from .config import load_config
+from .glossary import GlossaryError, load_glossary
 from .providers.openai_provider import OpenAIProvider, OpenAIProviderError
 from .subtitle_translation import SubtitleTranslationError
 
@@ -61,6 +62,15 @@ def main(
         "--model",
         help="OpenAI model override",
     ),
+    glossary_path: Path | None = typer.Option(
+        None,
+        "--glossary",
+        exists=True,
+        readable=True,
+        file_okay=True,
+        dir_okay=False,
+        help="UTF-8 JSON glossary file",
+    ),
 ) -> None:
     """Translate a subtitle file."""
 
@@ -76,6 +86,11 @@ def main(
             _fail(f"Output file already exists: {output_path}")
 
         config = load_config()
+        glossary = (
+            load_glossary(glossary_path, source_language, target_language)
+            if glossary_path is not None
+            else None
+        )
         provider = OpenAIProvider(model=model or config.openai_model)
         translate_srt_file(
             input_path=input_path,
@@ -84,7 +99,10 @@ def main(
             source_language=source_language,
             target_language=target_language,
             batch_size=batch_size,
+            glossary=glossary,
         )
+    except GlossaryError as exc:
+        _fail(f"Invalid glossary: {_error_message(exc)}")
     except OpenAIProviderError:
         _fail("Translation provider failed.")
     except (BatchProtocolError, SubtitleTranslationError) as exc:

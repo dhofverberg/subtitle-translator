@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from .glossary import Glossary
 from .providers.base import TranslationProvider
 from .srt import load_srt, save_srt
 from .subtitle_translation import SubtitleTranslationService
@@ -16,6 +17,7 @@ def translate_srt_file(
     source_language: str,
     target_language: str,
     batch_size: int,
+    glossary: Glossary | None = None,
 ) -> None:
     """Load, translate, and save an SRT subtitle file."""
 
@@ -28,6 +30,7 @@ def translate_srt_file(
         source_language=source_language,
         target_language=target_language,
         batch_size=batch_size,
+        glossary=glossary,
     )
     translated_file = service.translate(subtitle_file)
     save_srt(translated_file, output_path)

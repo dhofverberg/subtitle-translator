@@ -3,6 +3,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from subtitle_translator.batch import BatchItem, BatchTranslation
+from subtitle_translator.glossary import Glossary
 from subtitle_translator.providers import TranslationProvider, TranslationRequest
 from subtitle_translator.providers.base import (
     TranslationProvider as BaseTranslationProvider,
@@ -44,6 +45,7 @@ def test_translation_provider_can_be_implemented():
             items: list[BatchItem],
             source_language: str,
             target_language: str,
+            glossary: Glossary | None = None,
         ) -> list[BatchTranslation]:
             return [BatchTranslation(item.id, item.text) for item in items]
 

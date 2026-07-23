@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 
 from subtitle_translator.batch import BatchItem, BatchTranslation
+from subtitle_translator.glossary import Glossary, GlossaryError, GlossaryTerm
 from subtitle_translator.models import Subtitle, SubtitleFile
 from subtitle_translator.providers.base import TranslationProvider, TranslationRequest
 from subtitle_translator.subtitle_translation import (
@@ -22,6 +23,7 @@ class FakeProvider(TranslationProvider):
         self.responses = responses
         self.error = error
         self.calls: list[tuple[list[BatchItem], str, str]] = []
+        self.glossaries: list[Glossary | None] = []
 
     def translate(self, request: TranslationRequest) -> str:
         raise NotImplementedError
@@ -31,8 +33,10 @@ class FakeProvider(TranslationProvider):
         items: list[BatchItem],
         source_language: str,
         target_language: str,
+        glossary: Glossary | None = None,
     ) -> list[BatchTranslation]:
         self.calls.append((list(items), source_language, target_language))
+        self.glossaries.append(glossary)
 
         if self.error is not None:
             raise self.error
@@ -91,6 +95,46 @@ def test_translate_uses_sequential_batches_and_final_partial_batch():
         [5],
     ]
     assert [subtitle.index for subtitle in result.subtitles] == [1, 2, 3, 4, 5]
+
+
+def test_translate_passes_glossary_to_every_batch():
+    glossary = Glossary(
+        source_language="English",
+        target_language="Swedish",
+        terms=(GlossaryTerm("warp drive", "warpdrift"),),
+    )
+    provider = FakeProvider()
+    service = SubtitleTranslationService(
+        provider,
+        "English",
+        "Swedish",
+        batch_size=1,
+        glossary=glossary,
+    )
+
+    service.translate(SubtitleFile([make_subtitle(1), make_subtitle(2)]))
+
+    assert provider.glossaries == [glossary, glossary]
+
+
+def test_rejects_glossary_language_mismatch_before_provider_call():
+    glossary = Glossary(
+        source_language="German",
+        target_language="Swedish",
+        terms=(),
+    )
+    provider = FakeProvider()
+
+    with pytest.raises(GlossaryError, match="source language"):
+        SubtitleTranslationService(
+            provider,
+            "English",
+            "Swedish",
+            batch_size=1,
+            glossary=glossary,
+        )
+
+    assert provider.calls == []
 
 
 def test_translate_preserves_structure_without_mutating_input():
