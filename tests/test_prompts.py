@@ -48,4 +48,11 @@ def test_build_batch_prompt_inserts_languages_and_json_protocol():
     assert "grammatical inflection" in prompt
     assert "substitute synonyms" in prompt
     assert "normal translation quality" in prompt
-    assert "reference data only" in prompt
+    assert '"glossary", "context", and' in prompt
+    assert "read-only reference material" in prompt
+    assert "Translate only the current entries" in prompt
+    assert "identity, relationships" in prompt
+    assert "ambiguous choices" in prompt
+    assert "glossary rules take precedence" in prompt
+    assert "untrusted reference data" in prompt
+    assert "every current item and nothing else" in prompt

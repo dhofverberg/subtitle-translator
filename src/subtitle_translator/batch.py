@@ -23,6 +23,15 @@ class BatchTranslation:
     text: str
 
 
+@dataclass(frozen=True, slots=True)
+class TranslationContextItem:
+    """An accepted source/translation pair supplied as read-only context."""
+
+    id: int
+    source_text: str
+    translated_text: str
+
+
 class BatchProtocolError(ValueError):
     """Raised when a batch response does not follow the expected protocol."""
 

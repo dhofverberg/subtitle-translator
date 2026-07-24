@@ -1,0 +1,35 @@
+10
+00:00:01,000 --> 00:00:03,000
+Hello, world! 👋
+
+20
+00:00:04,250 --> 00:00:07,000
+The café opens early.
+Please bring your résumé.
+
+35
+00:00:08,500 --> 00:00:11,000
+A quiet robot counts: 1, 2, 3.
+
+50
+00:00:12,750 --> 00:00:15,500
+Good night — see you tomorrow.
+
+55
+00:00:16,750 --> 00:00:18,000
+The quiet robot didn't want to stop count
+
+56
+00:00:20,000 --> 00:00:25,000
+The First Officer responded:
+I am a first officer
+
+57
+00:00:26,000 --> 00:00:30,000
+Another First Officer went away.
+
+58
+00:00:31,000 --> 00:00:35,250
+Several quiet robots started counting,
+while the first officer listened.
+

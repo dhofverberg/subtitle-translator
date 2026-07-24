@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-from subtitle_translator.batch import BatchItem, BatchTranslation
+from subtitle_translator.batch import (
+    BatchItem,
+    BatchTranslation,
+    TranslationContextItem,
+)
 from subtitle_translator.glossary import Glossary, validate_glossary_languages
 from subtitle_translator.models import Subtitle, SubtitleFile
-from subtitle_translator.providers.base import TranslationProvider
+from subtitle_translator.providers.base import (
+    BatchTranslationRequest,
+    TranslationProvider,
+)
 
 
 class SubtitleTranslationError(ValueError):
@@ -22,15 +29,19 @@ class SubtitleTranslationService:
         target_language: str,
         batch_size: int,
         glossary: Glossary | None = None,
+        context_size: int = 10,
     ) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be greater than zero.")
+        if context_size < 0:
+            raise ValueError("context_size must not be negative.")
 
         self._provider = provider
         self._source_language = source_language
         self._target_language = target_language
         self._batch_size = batch_size
         self._glossary = glossary
+        self._context_size = context_size
 
         if glossary is not None:
             validate_glossary_languages(glossary, source_language, target_language)
@@ -39,19 +50,26 @@ class SubtitleTranslationService:
         """Translate every subtitle and return a new subtitle file."""
 
         translated_subtitles: list[Subtitle] = []
+        rolling_context: list[TranslationContextItem] = []
 
         for start in range(0, len(subtitle_file.subtitles), self._batch_size):
             subtitles = subtitle_file.subtitles[start : start + self._batch_size]
             items = [BatchItem(id=subtitle.index, text=subtitle.text) for subtitle in subtitles]
-            translations = self._provider.translate_batch(
-                items=items,
+            request = BatchTranslationRequest(
+                items=tuple(items),
                 source_language=self._source_language,
                 target_language=self._target_language,
                 glossary=self._glossary,
+                context=(
+                    tuple(rolling_context)
+                    if self._context_size > 0
+                    else None
+                ),
             )
+            translations = self._provider.translate_batch(request)
             translations_by_id = self._validate_translations(items, translations)
 
-            translated_subtitles.extend(
+            accepted_subtitles = [
                 Subtitle(
                     index=subtitle.index,
                     start=subtitle.start,
@@ -59,7 +77,23 @@ class SubtitleTranslationService:
                     text=translations_by_id[subtitle.index].text,
                 )
                 for subtitle in subtitles
-            )
+            ]
+            translated_subtitles.extend(accepted_subtitles)
+
+            if self._context_size > 0:
+                rolling_context.extend(
+                    TranslationContextItem(
+                        id=source.index,
+                        source_text=source.text,
+                        translated_text=translated.text,
+                    )
+                    for source, translated in zip(
+                        subtitles,
+                        accepted_subtitles,
+                        strict=True,
+                    )
+                )
+                rolling_context = rolling_context[-self._context_size :]
 
         return SubtitleFile(subtitles=translated_subtitles)
 

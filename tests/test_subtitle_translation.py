@@ -4,10 +4,18 @@ from datetime import timedelta
 
 import pytest
 
-from subtitle_translator.batch import BatchItem, BatchTranslation
+from subtitle_translator.batch import (
+    BatchItem,
+    BatchTranslation,
+    TranslationContextItem,
+)
 from subtitle_translator.glossary import Glossary, GlossaryError, GlossaryTerm
 from subtitle_translator.models import Subtitle, SubtitleFile
-from subtitle_translator.providers.base import TranslationProvider, TranslationRequest
+from subtitle_translator.providers.base import (
+    BatchTranslationRequest,
+    TranslationProvider,
+    TranslationRequest,
+)
 from subtitle_translator.subtitle_translation import (
     SubtitleTranslationError,
     SubtitleTranslationService,
@@ -19,32 +27,33 @@ class FakeProvider(TranslationProvider):
         self,
         responses: list[list[BatchTranslation]] | None = None,
         error: Exception | None = None,
+        error_on_call: int | None = None,
     ) -> None:
         self.responses = responses
         self.error = error
-        self.calls: list[tuple[list[BatchItem], str, str]] = []
-        self.glossaries: list[Glossary | None] = []
+        self.error_on_call = error_on_call
+        self.calls: list[BatchTranslationRequest] = []
 
     def translate(self, request: TranslationRequest) -> str:
         raise NotImplementedError
 
     def translate_batch(
         self,
-        items: list[BatchItem],
-        source_language: str,
-        target_language: str,
-        glossary: Glossary | None = None,
+        request: BatchTranslationRequest,
     ) -> list[BatchTranslation]:
-        self.calls.append((list(items), source_language, target_language))
-        self.glossaries.append(glossary)
+        self.calls.append(request)
 
-        if self.error is not None:
+        if self.error is not None and (
+            self.error_on_call is None
+            or len(self.calls) == self.error_on_call
+        ):
             raise self.error
         if self.responses is not None:
             return self.responses[len(self.calls) - 1]
 
         return [
-            BatchTranslation(id=item.id, text=f"Translated: {item.text}") for item in items
+            BatchTranslation(id=item.id, text=f"Translated: {item.text}")
+            for item in request.items
         ]
 
 
@@ -72,13 +81,13 @@ def test_translate_one_batch_constructs_items_and_returns_translations():
     result = service.translate(subtitle_file)
 
     assert [subtitle.text for subtitle in result.subtitles] == ["Ett", "Två"]
-    assert provider.calls == [
-        (
-            [BatchItem(1, "One"), BatchItem(2, "Two")],
-            "English",
-            "Swedish",
-        )
-    ]
+    assert provider.calls[0].items == (
+        BatchItem(1, "One"),
+        BatchItem(2, "Two"),
+    )
+    assert provider.calls[0].source_language == "English"
+    assert provider.calls[0].target_language == "Swedish"
+    assert provider.calls[0].context == ()
 
 
 def test_translate_uses_sequential_batches_and_final_partial_batch():
@@ -89,7 +98,7 @@ def test_translate_uses_sequential_batches_and_final_partial_batch():
     result = service.translate(subtitle_file)
 
     assert len(provider.calls) == 3
-    assert [[item.id for item in call[0]] for call in provider.calls] == [
+    assert [[item.id for item in call.items] for call in provider.calls] == [
         [1, 2],
         [3, 4],
         [5],
@@ -114,7 +123,11 @@ def test_translate_passes_glossary_to_every_batch():
 
     service.translate(SubtitleFile([make_subtitle(1), make_subtitle(2)]))
 
-    assert provider.glossaries == [glossary, glossary]
+    assert [call.glossary for call in provider.calls] == [glossary, glossary]
+    assert provider.calls[0].context == ()
+    assert provider.calls[1].context == (
+        TranslationContextItem(1, "Subtitle 1", "Translated: Subtitle 1"),
+    )
 
 
 def test_rejects_glossary_language_mismatch_before_provider_call():
@@ -181,6 +194,134 @@ def test_translate_empty_file_does_not_call_provider():
 def test_rejects_invalid_batch_size(batch_size):
     with pytest.raises(ValueError, match="batch_size must be greater than zero"):
         SubtitleTranslationService(FakeProvider(), "English", "Swedish", batch_size)
+
+
+def test_rejects_negative_context_size():
+    with pytest.raises(ValueError, match="context_size must not be negative"):
+        SubtitleTranslationService(
+            FakeProvider(),
+            "English",
+            "Swedish",
+            batch_size=1,
+            context_size=-1,
+        )
+
+
+def test_rolling_context_is_oldest_to_newest_and_limited():
+    provider = FakeProvider()
+    service = SubtitleTranslationService(
+        provider,
+        "English",
+        "Swedish",
+        batch_size=1,
+        context_size=2,
+    )
+
+    service.translate(SubtitleFile([make_subtitle(index) for index in range(1, 5)]))
+
+    assert [call.context for call in provider.calls] == [
+        (),
+        (TranslationContextItem(1, "Subtitle 1", "Translated: Subtitle 1"),),
+        (
+            TranslationContextItem(1, "Subtitle 1", "Translated: Subtitle 1"),
+            TranslationContextItem(2, "Subtitle 2", "Translated: Subtitle 2"),
+        ),
+        (
+            TranslationContextItem(2, "Subtitle 2", "Translated: Subtitle 2"),
+            TranslationContextItem(3, "Subtitle 3", "Translated: Subtitle 3"),
+        ),
+    ]
+
+
+def test_context_size_zero_disables_context():
+    provider = FakeProvider()
+    service = SubtitleTranslationService(
+        provider,
+        "English",
+        "Swedish",
+        batch_size=1,
+        context_size=0,
+    )
+
+    service.translate(SubtitleFile([make_subtitle(1), make_subtitle(2)]))
+
+    assert [call.context for call in provider.calls] == [None, None]
+
+
+def test_context_pairs_source_with_accepted_translation_for_ambiguity():
+    provider = FakeProvider(
+        responses=[
+            [BatchTranslation(10, "Hon är min mormor.")],
+            [BatchTranslation(20, "Mormor kommer senare.")],
+        ]
+    )
+    service = SubtitleTranslationService(
+        provider,
+        "English",
+        "Swedish",
+        batch_size=1,
+        context_size=10,
+    )
+
+    service.translate(
+        SubtitleFile(
+            [
+                make_subtitle(
+                    10,
+                    "She is my mother's mother, my grandmother.",
+                ),
+                make_subtitle(20, "Grandmother will come later."),
+            ]
+        )
+    )
+
+    assert provider.calls[1].context == (
+        TranslationContextItem(
+            id=10,
+            source_text="She is my mother's mother, my grandmother.",
+            translated_text="Hon är min mormor.",
+        ),
+    )
+
+
+def test_context_does_not_leak_between_service_calls():
+    provider = FakeProvider()
+    service = SubtitleTranslationService(
+        provider,
+        "English",
+        "Swedish",
+        batch_size=1,
+        context_size=10,
+    )
+
+    service.translate(SubtitleFile([make_subtitle(1)]))
+    service.translate(SubtitleFile([make_subtitle(2)]))
+
+    assert provider.calls[0].context == ()
+    assert provider.calls[1].context == ()
+
+
+def test_failed_batch_does_not_update_or_leak_context():
+    error = RuntimeError("Provider failed")
+    provider = FakeProvider(error=error, error_on_call=2)
+    service = SubtitleTranslationService(
+        provider,
+        "English",
+        "Swedish",
+        batch_size=1,
+        context_size=10,
+    )
+
+    with pytest.raises(RuntimeError):
+        service.translate(SubtitleFile([make_subtitle(1), make_subtitle(2)]))
+
+    provider.error = None
+    service.translate(SubtitleFile([make_subtitle(3)]))
+
+    assert provider.calls[1].context == (
+        TranslationContextItem(1, "Subtitle 1", "Translated: Subtitle 1"),
+    )
+    assert provider.calls[2].context == ()
 
 
 def test_provider_exceptions_propagate():

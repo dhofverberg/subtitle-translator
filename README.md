@@ -74,6 +74,26 @@ subtitles:
 subtitle-translator samples/openai_smoke_test.srt --source-language English --target-language Swedish --glossary samples/glossary.en-sv.json
 ~~~
 
+## Rolling subtitle context
+
+By default, each batch receives up to 10 recently translated subtitles from
+the same file as read-only context. This can help resolve pronouns, names,
+forms of address, recurring phrases, and ambiguous relationships. For example,
+an earlier English subtitle may establish that "grandmother" is the speaker's
+mother's mother and be accepted as Swedish "mormor"; a later batch can then see
+that source and translation pair when choosing the same relationship term.
+
+Set the maximum number of entries with `--context-size`, or disable context
+with `--context-size 0`:
+
+~~~bash
+subtitle-translator samples/openai_smoke_test.srt --context-size 10
+~~~
+
+Context is limited to the current file and translation run. It is not
+persistent, does not replace an explicit glossary, and may increase OpenAI
+input usage and cost.
+
 ## Manual OpenAI smoke test
 
 Set your OpenAI API key in the shell. You can optionally override the default

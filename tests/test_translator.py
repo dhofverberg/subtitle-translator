@@ -1,8 +1,11 @@
 import pytest
 
-from subtitle_translator.batch import BatchItem, BatchTranslation
-from subtitle_translator.glossary import Glossary
-from subtitle_translator.providers.base import TranslationProvider, TranslationRequest
+from subtitle_translator.batch import BatchTranslation
+from subtitle_translator.providers.base import (
+    BatchTranslationRequest,
+    TranslationProvider,
+    TranslationRequest,
+)
 from subtitle_translator.translator import Translator
 
 
@@ -22,12 +25,12 @@ class FakeProvider(TranslationProvider):
 
     def translate_batch(
         self,
-        items: list[BatchItem],
-        source_language: str,
-        target_language: str,
-        glossary: Glossary | None = None,
+        request: BatchTranslationRequest,
     ) -> list[BatchTranslation]:
-        return [BatchTranslation(item.id, self.result) for item in items]
+        return [
+            BatchTranslation(item.id, self.result)
+            for item in request.items
+        ]
 
 
 def test_translate_text_constructs_request_with_languages():

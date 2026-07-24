@@ -14,6 +14,7 @@ from .subtitle_translation import SubtitleTranslationError
 DEFAULT_SOURCE_LANGUAGE = "English"
 DEFAULT_TARGET_LANGUAGE = "Swedish"
 DEFAULT_BATCH_SIZE = 20
+DEFAULT_CONTEXT_SIZE = 10
 
 app = typer.Typer(
     add_completion=False,
@@ -71,11 +72,18 @@ def main(
         dir_okay=False,
         help="UTF-8 JSON glossary file",
     ),
+    context_size: int = typer.Option(
+        DEFAULT_CONTEXT_SIZE,
+        "--context-size",
+        help="Maximum previously translated subtitles used as context",
+    ),
 ) -> None:
     """Translate a subtitle file."""
 
     if batch_size <= 0:
         _fail("batch-size must be greater than zero.")
+    if context_size < 0:
+        _fail("context-size must not be negative.")
 
     output_path = output or input_path.with_name(f"{input_path.stem}.translated.srt")
 
@@ -100,6 +108,7 @@ def main(
             target_language=target_language,
             batch_size=batch_size,
             glossary=glossary,
+            context_size=context_size,
         )
     except GlossaryError as exc:
         _fail(f"Invalid glossary: {_error_message(exc)}")

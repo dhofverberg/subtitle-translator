@@ -4,11 +4,15 @@
   "terms": [
     {
       "source": "quiet robot",
-      "target": "tyst robot"
+      "target": "tystlåten robot"
     },
     {
       "source": "Good night",
       "target": "God natt"
+    },
+    {
+      "source": "First Officer",
+      "target": "sekond"
     }
   ]
 }

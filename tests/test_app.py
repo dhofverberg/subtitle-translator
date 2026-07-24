@@ -6,36 +6,35 @@ import pytest
 import srt
 
 from subtitle_translator.app import translate_srt_file
-from subtitle_translator.batch import BatchItem, BatchTranslation
-from subtitle_translator.glossary import Glossary
-from subtitle_translator.providers.base import TranslationProvider, TranslationRequest
+from subtitle_translator.batch import BatchTranslation
+from subtitle_translator.providers.base import (
+    BatchTranslationRequest,
+    TranslationProvider,
+    TranslationRequest,
+)
 from subtitle_translator.srt import load_srt
 
 
 class FakeProvider(TranslationProvider):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
-        self.calls: list[tuple[list[BatchItem], str, str]] = []
-        self.glossaries: list[Glossary | None] = []
+        self.calls: list[BatchTranslationRequest] = []
 
     def translate(self, request: TranslationRequest) -> str:
         raise NotImplementedError
 
     def translate_batch(
         self,
-        items: list[BatchItem],
-        source_language: str,
-        target_language: str,
-        glossary: Glossary | None = None,
+        request: BatchTranslationRequest,
     ) -> list[BatchTranslation]:
-        self.calls.append((list(items), source_language, target_language))
-        self.glossaries.append(glossary)
+        self.calls.append(request)
 
         if self.error is not None:
             raise self.error
 
         return [
-            BatchTranslation(id=item.id, text=f"Översatt: {item.text}") for item in items
+            BatchTranslation(id=item.id, text=f"Översatt: {item.text}")
+            for item in request.items
         ]
 
 
@@ -78,11 +77,14 @@ def test_translate_srt_file_end_to_end_with_multiple_batches(tmp_path: Path):
     translated = load_srt(output_path)
 
     assert len(provider.calls) == 2
-    assert [[item.id for item in call[0]] for call in provider.calls] == [
+    assert [[item.id for item in call.items] for call in provider.calls] == [
         [10, 20],
         [30],
     ]
-    assert [(call[1], call[2]) for call in provider.calls] == [
+    assert [
+        (call.source_language, call.target_language)
+        for call in provider.calls
+    ] == [
         ("English", "Swedish"),
         ("English", "Swedish"),
     ]

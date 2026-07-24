@@ -85,6 +85,7 @@ def test_cli_uses_explicit_output_and_shows_success(monkeypatch, tmp_path: Path)
     assert result.exit_code == 0
     assert calls[0]["input_path"] == input_path
     assert calls[0]["output_path"] == output_path
+    assert calls[0]["context_size"] == 10
     assert f"Translation complete: {output_path}" in result.output
 
 
@@ -118,6 +119,8 @@ def test_cli_forwards_languages_batch_size_and_model(monkeypatch, tmp_path: Path
             "7",
             "--model",
             "override-model",
+            "--context-size",
+            "4",
         ],
     )
 
@@ -127,6 +130,7 @@ def test_cli_forwards_languages_batch_size_and_model(monkeypatch, tmp_path: Path
     assert calls[0]["source_language"] == "German"
     assert calls[0]["target_language"] == "Swedish"
     assert calls[0]["batch_size"] == 7
+    assert calls[0]["context_size"] == 4
     assert calls[0]["glossary"] is None
 
 
@@ -234,11 +238,12 @@ def test_cli_rejects_invalid_glossary_before_provider_request(
     assert calls == []
 
 
-def test_cli_help_documents_glossary_option():
+def test_cli_help_documents_glossary_and_context_options():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
     assert "--glossary" in result.output
+    assert "--context-size" in result.output
 
 
 def test_cli_rejects_invalid_batch_size_before_translation(monkeypatch, tmp_path: Path):
@@ -250,6 +255,34 @@ def test_cli_rejects_invalid_batch_size_before_translation(monkeypatch, tmp_path
 
     assert result.exit_code != 0
     assert "batch-size must be greater than zero" in result.output
+    assert providers == []
+    assert calls == []
+
+
+def test_cli_allows_context_size_zero(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(app, [str(input_path), "--context-size", "0"])
+
+    assert result.exit_code == 0
+    assert len(providers) == 1
+    assert calls[0]["context_size"] == 0
+
+
+def test_cli_rejects_negative_context_size_before_provider_creation(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(app, [str(input_path), "--context-size", "-1"])
+
+    assert result.exit_code != 0
+    assert "context-size must not be negative" in result.output
     assert providers == []
     assert calls == []
 
