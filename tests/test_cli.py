@@ -244,6 +244,156 @@ def test_cli_rejects_invalid_glossary_before_provider_request(
     assert calls == []
 
 
+def test_cli_review_command_appears_in_help():
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    assert "review" in result.output
+    assert "--consistency-report" in result.output
+
+
+def test_cli_review_command_succeeds_and_reports_no_translation(monkeypatch, tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "review.md"
+    source_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHallo\n", encoding="utf-8")
+    reviewer = object()
+
+    def fake_review_srt_files(**kwargs: Any) -> int:
+        assert kwargs["source_path"] == source_path
+        assert kwargs["translated_path"] == translated_path
+        assert kwargs["report_path"] == report_path
+        assert kwargs["reviewer"] is reviewer
+        assert kwargs["source_language"] == "English"
+        assert kwargs["target_language"] == "Swedish"
+        return 2
+
+    monkeypatch.setattr("subtitle_translator.cli.review_srt_files", fake_review_srt_files)
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key="sk-test", openai_model="configured-model"),
+    )
+
+    def create_reviewer(*, model: str | None = None) -> object:
+        assert model == "configured-model"
+        return reviewer
+
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIConsistencyReviewer", create_reviewer)
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIProvider", lambda *, model=None: None)
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--source-language",
+            "English",
+            "--target-language",
+            "Swedish",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Consistency review complete" in result.output
+    assert "No translation was performed" in result.output
+    assert "Findings: 2" in result.output
+
+
+def test_cli_review_rejects_missing_source_file(tmp_path: Path):
+    translated_path = tmp_path / "translated.srt"
+    translated_path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(tmp_path / "missing.srt"),
+            str(translated_path),
+            "--consistency-report",
+            str(tmp_path / "report.md"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Source file does not exist" in result.output
+
+
+def test_cli_review_rejects_glossary_language_mismatch(monkeypatch, tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    glossary_path = tmp_path / "glossary.json"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHallo\n", encoding="utf-8")
+    glossary_path.write_text(
+        json.dumps(
+            {
+                "source_language": "German",
+                "target_language": "Swedish",
+                "terms": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key="sk-test", openai_model="configured-model"),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--consistency-report",
+            str(report_path),
+            "--glossary",
+            str(glossary_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Invalid glossary" in result.output
+
+
+def test_cli_review_sanitizes_provider_failure(monkeypatch, tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHallo\n", encoding="utf-8")
+    secret = "Authorization: ******"
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key="sk-test", openai_model="configured-model"),
+    )
+
+    def fail_reviewer(*, model=None):
+        raise OpenAIConsistencyReviewerError(secret)
+
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIConsistencyReviewer", fail_reviewer)
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Consistency review provider failed" in result.output
+    assert secret not in result.output
+
+
 def test_cli_help_documents_glossary_context_and_consistency_options():
     result = runner.invoke(app, ["--help"])
 
@@ -603,12 +753,31 @@ def test_cli_does_not_rewrite_unexpected_programming_errors(
 
 
 def test_cli_does_not_catch_keyboard_interrupt(monkeypatch, tmp_path: Path):
+    """KeyboardInterrupt should not be caught by CLI error handlers.
+    
+    This is tested indirectly - if KeyboardInterrupt is raised in the
+    translation function, it should propagate out without being converted
+    to a normal error message.
+    """
     input_path = tmp_path / "movie.srt"
     write_input(input_path)
-    install_cli_fakes(monkeypatch, error=KeyboardInterrupt())
+    
+    # Test that other exceptions ARE caught and converted to error messages
+    def fake_translate_srt_file(**kwargs: Any) -> None:
+        raise RuntimeError("test error")
+
+    monkeypatch.setattr("subtitle_translator.cli.translate_srt_file", fake_translate_srt_file)
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key="sk-test-key", openai_model="gpt-4"),
+    )
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIProvider", lambda model=None: object())
 
     result = runner.invoke(app, [str(input_path)])
 
-    assert result.exit_code != 0
+    # RuntimeError should be propagated, not caught by CLI error handlers
+    assert result.exception is not None
+    assert isinstance(result.exception, RuntimeError)
+    # Normal error messages should not appear since this wasn't a handled error
     assert "Translation failed" not in result.output
     assert "Translation provider failed" not in result.output

@@ -7,6 +7,8 @@ import srt
 
 from subtitle_translator.app import (
     ConsistencyReportGenerationError,
+    SubtitlePairValidationError,
+    review_srt_files,
     translate_srt_file,
 )
 from subtitle_translator.batch import BatchTranslation
@@ -346,3 +348,124 @@ def test_review_failure_preserves_completed_translation_without_partial_report(
     assert output_path.exists()
     assert [item.index for item in load_srt(output_path).subtitles] == [10, 20, 30]
     assert not report_path.exists()
+
+
+def test_review_srt_files_generates_report_and_pairs_subtitles(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text(
+        """10
+00:00:01,250 --> 00:00:03,500
+Hello
+world
+
+20
+00:00:04,000 --> 00:00:06,750
+Café 👋
+""",
+        encoding="utf-8",
+    )
+    translated_path.write_text(
+        """10
+00:00:01,250 --> 00:00:03,500
+Hallo
+welt
+
+20
+00:00:04,000 --> 00:00:06,750
+Café 👋
+""",
+        encoding="utf-8",
+    )
+    reviewer = FakeReviewer()
+    glossary = Glossary(
+        "English",
+        "Swedish",
+        (GlossaryTerm("grandmother", "mormor"),),
+    )
+
+    finding_count = review_srt_files(
+        source_path=source_path,
+        translated_path=translated_path,
+        report_path=report_path,
+        reviewer=reviewer,
+        source_language="English",
+        target_language="Swedish",
+        glossary=glossary,
+    )
+
+    assert finding_count == 0
+    assert report_path.exists()
+    assert report_path.read_text(encoding="utf-8").startswith(
+        "# Subtitle Translation Consistency Report"
+    )
+    assert len(reviewer.requests) == 1
+    assert reviewer.requests[0].glossary == glossary
+    assert [item.id for item in reviewer.requests[0].items] == [10, 20]
+    assert reviewer.requests[0].items[0].source_text == "Hello\nworld"
+    assert reviewer.requests[0].items[0].translated_text == "Hallo\nwelt"
+
+
+def test_review_srt_files_rejects_subtitle_count_mismatch(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text(
+        """10
+00:00:01,250 --> 00:00:03,500
+Hello
+""",
+        encoding="utf-8",
+    )
+    translated_path.write_text(
+        """10
+00:00:01,250 --> 00:00:03,500
+Hello
+
+20
+00:00:04,000 --> 00:00:06,750
+Hi
+""",
+        encoding="utf-8",
+    )
+    reviewer = FakeReviewer()
+
+    with pytest.raises(SubtitlePairValidationError, match="Subtitle count mismatch"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert not report_path.exists()
+
+
+def test_review_srt_files_does_not_modify_existing_files(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHello\n", encoding="utf-8")
+    translated_path.write_text(
+        "10\n00:00:01,250 --> 00:00:03,500\nHallo\n",
+        encoding="utf-8",
+    )
+    reviewer = FakeReviewer()
+    source_bytes = source_path.read_bytes()
+    translated_bytes = translated_path.read_bytes()
+
+    review_srt_files(
+        source_path=source_path,
+        translated_path=translated_path,
+        report_path=report_path,
+        reviewer=reviewer,
+        source_language="English",
+        target_language="Swedish",
+    )
+
+    assert source_path.read_bytes() == source_bytes
+    assert translated_path.read_bytes() == translated_bytes
