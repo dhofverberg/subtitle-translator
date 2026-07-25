@@ -94,6 +94,35 @@ Context is limited to the current file and translation run. It is not
 persistent, does not replace an explicit glossary, and may increase OpenAI
 input usage and cost.
 
+## Optional consistency report
+
+Use `--consistency-report PATH` to run a separate advisory review after the
+translated SRT has been saved:
+
+~~~bash
+subtitle-translator movie.srt \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+~~~
+
+The Markdown report highlights likely cross-subtitle inconsistencies for human
+inspection. For example, it may cite exact subtitle IDs where the same
+"grandmother" appears as both "mormor" and "farmor" and suggest checking which
+family relationship is intended.
+
+This review makes additional paid OpenAI API requests. It never changes or
+rewrites the translated SRT. Findings are advisory, require manual review, and
+may include false positives.
+
+The three consistency features serve different purposes:
+
+- A glossary supplies explicit approved terminology.
+- Rolling context supplies recent accepted translations while translation is
+  in progress.
+- A consistency report reviews the completed translation afterward and
+  reports possible issues without applying fixes.
+
 ## Manual OpenAI smoke test
 
 Set your OpenAI API key in the shell. You can optionally override the default

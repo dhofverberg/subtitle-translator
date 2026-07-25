@@ -8,11 +8,17 @@ import pytest
 import srt
 from typer.testing import CliRunner
 
-from subtitle_translator.app import TranslationInputError
+from subtitle_translator.app import (
+    ConsistencyReportGenerationError,
+    TranslationInputError,
+)
 from subtitle_translator.batch import BatchProtocolError
 from subtitle_translator.cli import app
 from subtitle_translator.config import Config
 from subtitle_translator.providers.openai_provider import OpenAIProviderError
+from subtitle_translator.providers.openai_consistency_reviewer import (
+    OpenAIConsistencyReviewerError,
+)
 from subtitle_translator.subtitle_translation import SubtitleTranslationError
 
 runner = CliRunner()
@@ -238,12 +244,173 @@ def test_cli_rejects_invalid_glossary_before_provider_request(
     assert calls == []
 
 
-def test_cli_help_documents_glossary_and_context_options():
+def test_cli_help_documents_glossary_context_and_consistency_options():
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
     assert "--glossary" in result.output
     assert "--context-size" in result.output
+    assert "--consistency-report" in result.output
+
+
+def test_cli_without_report_does_not_construct_reviewer(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+
+    def unexpected_reviewer(*, model=None):
+        raise AssertionError("reviewer must not be constructed")
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        unexpected_reviewer,
+    )
+
+    result = runner.invoke(app, [str(input_path)])
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0]["consistency_reviewer"] is None
+    assert calls[0]["consistency_report_path"] is None
+
+
+def test_cli_forwards_report_path_and_resolved_model(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+    reviewers: list[tuple[str | None, object]] = []
+
+    def create_reviewer(*, model=None):
+        reviewer = object()
+        reviewers.append((model, reviewer))
+        return reviewer
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        create_reviewer,
+    )
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--consistency-report", str(report_path)],
+    )
+
+    assert result.exit_code == 0
+    assert reviewers[0][0] == "configured-model"
+    assert calls[0]["consistency_reviewer"] is reviewers[0][1]
+    assert calls[0]["consistency_report_path"] == report_path
+    assert f"Consistency report complete: {report_path}" in result.output
+
+
+def test_cli_rejects_existing_report_before_provider_creation(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    report_path.write_text("existing", encoding="utf-8")
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--consistency-report", str(report_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "Consistency report already exists" in result.output
+    assert providers == []
+    assert calls == []
+    assert report_path.read_text(encoding="utf-8") == "existing"
+
+
+@pytest.mark.parametrize("same_as", ["input", "output"])
+def test_cli_rejects_report_path_equal_to_srt_path(
+    monkeypatch,
+    tmp_path: Path,
+    same_as: str,
+):
+    input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "movie.translated.srt"
+    write_input(input_path)
+    report_path = input_path if same_as == "input" else output_path
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--consistency-report", str(report_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "Consistency report path must differ" in result.output
+    assert providers == []
+    assert calls == []
+
+
+def test_cli_reports_post_translation_review_failure_and_preserves_output(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "movie.translated.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    install_cli_fakes(monkeypatch)
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: object(),
+    )
+
+    def fail_after_translation(**kwargs: Any) -> None:
+        kwargs["output_path"].write_text("translated", encoding="utf-8")
+        raise ConsistencyReportGenerationError("secret request payload")
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.translate_srt_file",
+        fail_after_translation,
+    )
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--consistency-report", str(report_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "Translation succeeded, but consistency review failed" in result.output
+    assert "secret request payload" not in result.output
+    assert output_path.read_text(encoding="utf-8") == "translated"
+    assert not report_path.exists()
+
+
+def test_cli_sanitizes_reviewer_initialization_errors(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    secret = "Authorization: Bearer sk-review-secret"
+    providers, calls = install_cli_fakes(monkeypatch)
+
+    def fail_reviewer(*, model=None):
+        raise OpenAIConsistencyReviewerError(secret)
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        fail_reviewer,
+    )
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--consistency-report", str(report_path)],
+    )
+
+    assert result.exit_code != 0
+    assert "Consistency review provider failed" in result.output
+    assert secret not in result.output
+    assert len(providers) == 1
+    assert calls == []
 
 
 def test_cli_rejects_invalid_batch_size_before_translation(monkeypatch, tmp_path: Path):

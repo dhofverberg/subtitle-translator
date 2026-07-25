@@ -58,6 +58,7 @@ jobs:
           required_package_files = (
               "subtitle_translator/resources/prompt.txt",
               "subtitle_translator/resources/batch_prompt.txt",
+              "subtitle_translator/resources/consistency_prompt.txt",
           )
 
           for required in required_package_files:
@@ -97,6 +98,7 @@ jobs:
           resources = files("subtitle_translator").joinpath("resources")
           assert resources.joinpath("prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("batch_prompt.txt").read_text(encoding="utf-8")
+          assert resources.joinpath("consistency_prompt.txt").read_text(encoding="utf-8")
           assert version("subtitle-translator") == subtitle_translator.__version__
           PY
 

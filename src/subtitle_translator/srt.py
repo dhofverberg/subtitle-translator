@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 
 import srt
 
 from .models import Subtitle, SubtitleFile
+from .persistence import write_text_atomic
 
 
 def load_srt(filename: str | Path) -> SubtitleFile:
@@ -56,25 +55,4 @@ def save_srt(
 
     text = srt.compose(output, reindex=False)
 
-    path = Path(filename)
-    temporary_path: Path | None = None
-
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary_file:
-            temporary_file.write(text)
-            temporary_path = Path(temporary_file.name)
-
-        if overwrite:
-            os.replace(temporary_path, path)
-        else:
-            os.link(temporary_path, path)
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+    write_text_atomic(text, filename, overwrite=overwrite)

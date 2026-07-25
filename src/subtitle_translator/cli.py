@@ -4,10 +4,18 @@ from typing import NoReturn
 import srt
 import typer
 
-from .app import TranslationInputError, translate_srt_file
+from .app import (
+    ConsistencyReportGenerationError,
+    TranslationInputError,
+    translate_srt_file,
+)
 from .batch import BatchProtocolError
 from .config import load_config
 from .glossary import GlossaryError, load_glossary
+from .providers.openai_consistency_reviewer import (
+    OpenAIConsistencyReviewer,
+    OpenAIConsistencyReviewerError,
+)
 from .providers.openai_provider import OpenAIProvider, OpenAIProviderError
 from .subtitle_translation import SubtitleTranslationError
 
@@ -77,6 +85,11 @@ def main(
         "--context-size",
         help="Maximum previously translated subtitles used as context",
     ),
+    consistency_report: Path | None = typer.Option(
+        None,
+        "--consistency-report",
+        help="Write an advisory post-translation Markdown consistency report",
+    ),
 ) -> None:
     """Translate a subtitle file."""
 
@@ -92,6 +105,17 @@ def main(
             _fail("Input and output paths must be different.")
         if output_path.exists():
             _fail(f"Output file already exists: {output_path}")
+        if consistency_report is not None:
+            if consistency_report.resolve() == input_path.resolve():
+                _fail("Consistency report path must differ from the input path.")
+            if consistency_report.resolve() == output_path.resolve():
+                _fail(
+                    "Consistency report path must differ from the translated output path."
+                )
+            if consistency_report.exists():
+                _fail(
+                    f"Consistency report already exists: {consistency_report}"
+                )
 
         config = load_config()
         glossary = (
@@ -99,7 +123,13 @@ def main(
             if glossary_path is not None
             else None
         )
-        provider = OpenAIProvider(model=model or config.openai_model)
+        resolved_model = model or config.openai_model
+        provider = OpenAIProvider(model=resolved_model)
+        reviewer = (
+            OpenAIConsistencyReviewer(model=resolved_model)
+            if consistency_report is not None
+            else None
+        )
         translate_srt_file(
             input_path=input_path,
             output_path=output_path,
@@ -109,11 +139,17 @@ def main(
             batch_size=batch_size,
             glossary=glossary,
             context_size=context_size,
+            consistency_reviewer=reviewer,
+            consistency_report_path=consistency_report,
         )
     except GlossaryError as exc:
         _fail(f"Invalid glossary: {_error_message(exc)}")
     except OpenAIProviderError:
         _fail("Translation provider failed.")
+    except OpenAIConsistencyReviewerError:
+        _fail("Consistency review provider failed.")
+    except ConsistencyReportGenerationError:
+        _fail("Translation succeeded, but consistency review failed.")
     except (BatchProtocolError, SubtitleTranslationError) as exc:
         _fail(f"Invalid translation response: {_error_message(exc)}")
     except (srt.SRTParseError, srt.TimestampParseError) as exc:
@@ -124,6 +160,8 @@ def main(
         _fail(f"Invalid input: {_error_message(exc)}")
 
     typer.echo(f"Translation complete: {output_path}")
+    if consistency_report is not None:
+        typer.echo(f"Consistency report complete: {consistency_report}")
 
 
 def _error_message(exc: Exception) -> str:

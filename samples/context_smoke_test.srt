@@ -1,0 +1,15 @@
+10
+00:00:01,000 --> 00:00:03,000
+My father's mother lives in Malmö.
+
+20
+00:00:04,000 --> 00:00:06,000
+We visit her every summer.
+
+30
+00:00:07,000 --> 00:00:09,000
+Grandmother always makes pancakes.
+
+40
+00:00:10,000 --> 00:00:12,000
+She taught me this recipe.

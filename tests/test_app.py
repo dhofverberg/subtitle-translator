@@ -5,8 +5,18 @@ from pathlib import Path
 import pytest
 import srt
 
-from subtitle_translator.app import translate_srt_file
+from subtitle_translator.app import (
+    ConsistencyReportGenerationError,
+    translate_srt_file,
+)
 from subtitle_translator.batch import BatchTranslation
+from subtitle_translator.consistency import (
+    ConsistencyReport,
+    ConsistencyReviewer,
+    ConsistencyReviewerError,
+    ConsistencyReviewRequest,
+)
+from subtitle_translator.glossary import Glossary, GlossaryTerm
 from subtitle_translator.providers.base import (
     BatchTranslationRequest,
     TranslationProvider,
@@ -36,6 +46,18 @@ class FakeProvider(TranslationProvider):
             BatchTranslation(id=item.id, text=f"Översatt: {item.text}")
             for item in request.items
         ]
+
+
+class FakeReviewer(ConsistencyReviewer):
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.requests: list[ConsistencyReviewRequest] = []
+
+    def review(self, request: ConsistencyReviewRequest) -> ConsistencyReport:
+        self.requests.append(request)
+        if self.error is not None:
+            raise self.error
+        return ConsistencyReport()
 
 
 def write_input_srt(path: Path) -> None:
@@ -183,3 +205,144 @@ def test_translate_srt_file_propagates_malformed_srt_error(tmp_path: Path):
 
     assert provider.calls == []
     assert not output_path.exists()
+
+
+def test_translate_srt_file_generates_advisory_report_after_translation(
+    tmp_path: Path,
+):
+    input_path = tmp_path / "input.srt"
+    output_path = tmp_path / "output.srt"
+    report_path = tmp_path / "consistency.md"
+    write_input_srt(input_path)
+    reviewer = FakeReviewer()
+    glossary = Glossary(
+        "English",
+        "Swedish",
+        (GlossaryTerm("grandmother", "mormor"),),
+    )
+
+    translate_srt_file(
+        input_path,
+        output_path,
+        FakeProvider(),
+        "English",
+        "Swedish",
+        batch_size=2,
+        glossary=glossary,
+        consistency_reviewer=reviewer,
+        consistency_report_path=report_path,
+    )
+
+    assert output_path.exists()
+    assert report_path.exists()
+    assert "No likely consistency issues were identified." in report_path.read_text(
+        encoding="utf-8"
+    )
+    assert len(reviewer.requests) == 1
+    assert reviewer.requests[0].glossary == glossary
+    assert [item.id for item in reviewer.requests[0].items] == [10, 20, 30]
+    assert reviewer.requests[0].items[0].source_text == "Hello\nworld"
+    assert reviewer.requests[0].items[0].translated_text == "Översatt: Hello\nworld"
+
+
+def test_existing_report_is_rejected_before_translation_provider_call(tmp_path: Path):
+    input_path = tmp_path / "input.srt"
+    output_path = tmp_path / "output.srt"
+    report_path = tmp_path / "consistency.md"
+    write_input_srt(input_path)
+    report_path.write_text("existing report", encoding="utf-8")
+    provider = FakeProvider()
+    reviewer = FakeReviewer()
+
+    with pytest.raises(FileExistsError, match="Consistency report already exists"):
+        translate_srt_file(
+            input_path,
+            output_path,
+            provider,
+            "English",
+            "Swedish",
+            batch_size=2,
+            consistency_reviewer=reviewer,
+            consistency_report_path=report_path,
+        )
+
+    assert provider.calls == []
+    assert reviewer.requests == []
+    assert not output_path.exists()
+    assert report_path.read_text(encoding="utf-8") == "existing report"
+
+
+@pytest.mark.parametrize("same_as", ["input", "output"])
+def test_report_path_must_differ_from_srt_paths(tmp_path: Path, same_as: str):
+    input_path = tmp_path / "input.srt"
+    output_path = tmp_path / "output.srt"
+    write_input_srt(input_path)
+    report_path = input_path if same_as == "input" else output_path
+    provider = FakeProvider()
+
+    with pytest.raises(ValueError, match="Consistency report path must differ"):
+        translate_srt_file(
+            input_path,
+            output_path,
+            provider,
+            "English",
+            "Swedish",
+            batch_size=2,
+            consistency_reviewer=FakeReviewer(),
+            consistency_report_path=report_path,
+        )
+
+    assert provider.calls == []
+    assert not output_path.exists()
+
+
+def test_translation_failure_creates_neither_output_nor_report(tmp_path: Path):
+    input_path = tmp_path / "input.srt"
+    output_path = tmp_path / "output.srt"
+    report_path = tmp_path / "consistency.md"
+    write_input_srt(input_path)
+
+    with pytest.raises(RuntimeError, match="translation failed"):
+        translate_srt_file(
+            input_path,
+            output_path,
+            FakeProvider(error=RuntimeError("translation failed")),
+            "English",
+            "Swedish",
+            batch_size=2,
+            consistency_reviewer=FakeReviewer(),
+            consistency_report_path=report_path,
+        )
+
+    assert not output_path.exists()
+    assert not report_path.exists()
+
+
+def test_review_failure_preserves_completed_translation_without_partial_report(
+    tmp_path: Path,
+):
+    input_path = tmp_path / "input.srt"
+    output_path = tmp_path / "output.srt"
+    report_path = tmp_path / "consistency.md"
+    write_input_srt(input_path)
+    error = ConsistencyReviewerError("Authorization: Bearer secret")
+
+    with pytest.raises(
+        ConsistencyReportGenerationError,
+        match="Translation succeeded, but consistency review failed",
+    ) as exc_info:
+        translate_srt_file(
+            input_path,
+            output_path,
+            FakeProvider(),
+            "English",
+            "Swedish",
+            batch_size=2,
+            consistency_reviewer=FakeReviewer(error),
+            consistency_report_path=report_path,
+        )
+
+    assert exc_info.value.__cause__ is error
+    assert output_path.exists()
+    assert [item.index for item in load_srt(output_path).subtitles] == [10, 20, 30]
+    assert not report_path.exists()

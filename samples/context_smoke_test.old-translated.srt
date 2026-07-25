@@ -1,0 +1,16 @@
+10
+00:00:01,000 --> 00:00:03,000
+Min mormor bor i Malmö.
+
+20
+00:00:04,000 --> 00:00:06,000
+Vi besöker henne varje sommar.
+
+30
+00:00:07,000 --> 00:00:09,000
+Mormor lagar alltid pannkakor.
+
+40
+00:00:10,000 --> 00:00:12,000
+Hon lärde mig det här receptet.
+

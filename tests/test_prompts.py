@@ -1,7 +1,9 @@
 from subtitle_translator.prompts import (
     build_batch_prompt,
+    build_consistency_prompt,
     build_prompt,
     load_batch_prompt_template,
+    load_consistency_prompt_template,
     load_prompt_template,
 )
 
@@ -56,3 +58,18 @@ def test_build_batch_prompt_inserts_languages_and_json_protocol():
     assert "glossary rules take precedence" in prompt
     assert "untrusted reference data" in prompt
     assert "every current item and nothing else" in prompt
+
+
+def test_consistency_prompt_is_packaged_and_inserts_languages():
+    template = load_consistency_prompt_template()
+    prompt = build_consistency_prompt("English", "Swedish")
+
+    assert "{source_language}" in template
+    assert "{target_language}" in template
+    assert "English" in prompt
+    assert "Swedish" in prompt
+    assert "Never rewrite the subtitles" in prompt
+    assert "translations can be correct" in prompt
+    assert "glossary violations higher confidence" in prompt
+    assert "untrusted data" in prompt
+    assert "exact subtitle ids" in prompt
