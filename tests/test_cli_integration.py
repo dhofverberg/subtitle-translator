@@ -211,6 +211,71 @@ Warp drive ready.
     assert [subtitle.index for subtitle in load_srt(output_path).subtitles] == [10, 20]
 
 
+def test_cli_review_command_runs_full_standalone_review_flow(monkeypatch, tmp_path: Path):
+    source_path = tmp_path / "movie.en.srt"
+    translated_path = tmp_path / "movie.sv.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    source_text = """10
+00:00:01,000 --> 00:00:02,000
+Hello
+world
+
+20
+00:00:03,000 --> 00:00:04,000
+Grandmother called.
+"""
+    translated_text = """10
+00:00:01,000 --> 00:00:02,000
+Hej
+världen
+
+20
+00:00:03,000 --> 00:00:04,000
+Mormor ringde.
+"""
+    source_path.write_text(source_text, encoding="utf-8")
+    translated_path.write_text(translated_text, encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: reviewer,
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: type("Config", (), {"openai_model": "configured-model"})(),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--source-language",
+            "English",
+            "--target-language",
+            "Swedish",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert report_path.exists()
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "# Subtitle Translation Consistency Report" in report_text
+    assert "**Subtitle 10**" in report_text
+    assert "Hello" in report_text
+    assert "world" in report_text
+    assert "Hej" in report_text
+    assert "världen" in report_text
+    assert "Mormor ringde." in report_text
+    assert "Grandmother called." in report_text
+    assert source_path.read_text(encoding="utf-8") == source_text
+    assert translated_path.read_text(encoding="utf-8") == translated_text
+
+
 def test_cli_integration_generates_translation_and_consistency_report(
     monkeypatch,
     tmp_path: Path,

@@ -123,6 +123,69 @@ The three consistency features serve different purposes:
 - A consistency report reviews the completed translation afterward and
   reports possible issues without applying fixes.
 
+## Standalone consistency review of existing subtitle files
+
+Use the `review` command to generate a consistency report from existing source
+and translated SRT files without re-translating:
+
+~~~bash
+subtitle-translator review movie.en.srt movie.sv.srt \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+~~~
+
+This is useful for:
+
+- Retrying a failed consistency report after the translation is complete
+- Reviewing pre-existing or external subtitle files
+- Adjusting glossary or language settings and re-running the review
+
+### Requirements
+
+Both SRT files must have:
+
+- The same number of subtitles
+- Matching subtitle indices (IDs)
+- Identical start and end timestamps for each pair
+
+If files don't match, the command fails before making any API requests.
+
+### Glossary with standalone review
+
+Supply a glossary with `--glossary PATH` exactly as with translation:
+
+~~~bash
+subtitle-translator review movie.en.srt movie.sv.srt \
+  --source-language English \
+  --target-language Swedish \
+  --glossary glossary.json \
+  --consistency-report movie.consistency.md
+~~~
+
+Glossary languages must match the requested source and target languages.
+
+### Important notes
+
+- **No translation occurs** — neither source nor translated SRT is modified
+- **Additional API requests** — the review makes separate, paid OpenAI API calls
+  for consistency analysis
+- **Advisory only** — all findings require manual review and may include false
+  positives
+- **Cannot realign subtitles** — files must already have matching structure;
+  automatic alignment is not performed
+
+### Difference: translate with report vs. standalone review
+
+| Aspect | `translate --consistency-report` | `review` command |
+|--------|----------------------------------|------------------|
+| **Input** | Source SRT file (English) | Source + translated SRT files |
+| **Translation** | Yes, generates translated SRT | No, uses existing files |
+| **Review** | Yes, after translation | Yes, only |
+| **Output files** | Translated SRT + report | Report only |
+| **Failed translation** | Partial report (if not caught before save) | No translation to preserve |
+| **Use case** | Full workflow: translate and review | Retry review, external files |
+
 ## Manual OpenAI smoke test
 
 Set your OpenAI API key in the shell. You can optionally override the default
