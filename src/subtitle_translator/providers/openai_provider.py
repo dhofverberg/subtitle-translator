@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from openai import OpenAI, OpenAIError
@@ -10,21 +9,22 @@ from openai import OpenAI, OpenAIError
 from subtitle_translator.batch import (
     BatchProtocolError,
     BatchTranslation,
-    TranslationContextItem,
     parse_batch_response,
-    serialize_batch,
 )
 from subtitle_translator.config import load_config
-from subtitle_translator.glossary import (
-    glossary_to_dict,
-    validate_glossary_languages,
-)
+from subtitle_translator.glossary import validate_glossary_languages
 from subtitle_translator.prompts import build_batch_prompt, build_prompt
 
-from .base import BatchTranslationRequest, TranslationProvider, TranslationRequest
+from .base import (
+    BatchTranslationRequest,
+    TranslationProvider,
+    TranslationProviderError,
+    TranslationRequest,
+    serialize_batch_request,
+)
 
 
-class OpenAIProviderError(RuntimeError):
+class OpenAIProviderError(TranslationProviderError):
     """Raised when the OpenAI provider cannot return a translation."""
 
 
@@ -80,7 +80,7 @@ class OpenAIProvider(TranslationProvider):
                     source_language=request.source_language,
                     target_language=request.target_language,
                 ),
-                input=_serialize_batch_input(request),
+                input=serialize_batch_request(request),
             )
         except OpenAIError as exc:
             raise OpenAIProviderError("OpenAI batch translation request failed.") from exc
@@ -94,35 +94,3 @@ class OpenAIProvider(TranslationProvider):
             raise OpenAIProviderError(
                 f"OpenAI returned an invalid batch translation: {exc}"
             ) from exc
-
-
-def _serialize_batch_input(
-    request: BatchTranslationRequest,
-) -> str:
-    if request.glossary is None and request.context is None:
-        return serialize_batch(list(request.items))
-
-    payload = {
-        "glossary": (
-            glossary_to_dict(request.glossary)
-            if request.glossary is not None
-            else None
-        ),
-        "context": [
-            _context_item_to_dict(item)
-            for item in request.context or ()
-        ],
-        "items": [
-            {"id": item.id, "text": item.text}
-            for item in request.items
-        ],
-    }
-    return json.dumps(payload, ensure_ascii=False)
-
-
-def _context_item_to_dict(item: TranslationContextItem) -> dict[str, int | str]:
-    return {
-        "id": item.id,
-        "source": item.source_text,
-        "translation": item.translated_text,
-    }

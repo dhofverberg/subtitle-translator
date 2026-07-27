@@ -33,10 +33,13 @@ Or activate it on Windows PowerShell:
 .venv\Scripts\Activate.ps1
 ~~~
 
-Then install the project and development tools:
+Install the provider support you need:
 
 ~~~bash
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[openai]"       # OpenAI translation and review
+python -m pip install -e ".[gemini]"       # Gemini translation only
+python -m pip install -e ".[all]"          # Both providers
+python -m pip install -e ".[dev,all]"      # Both providers plus development tools
 ~~~
 
 ## Running
@@ -44,6 +47,43 @@ python -m pip install -e ".[dev]"
 ```bash
 subtitle-translator --help
 ```
+
+## Translation providers
+
+OpenAI is the default provider, preserving existing commands. Select Gemini
+explicitly with `--provider gemini`; provider names are case-insensitive:
+
+~~~bash
+subtitle-translator movie.srt --provider gemini \
+  --source-language English --target-language Swedish
+~~~
+
+Set `GEMINI_API_KEY` to authenticate Gemini requests. `GEMINI_MODEL` optionally
+sets the default Gemini model, and `--model` overrides the selected provider's
+default for one command:
+
+~~~bash
+export GEMINI_API_KEY="your_api_key_here"
+export GEMINI_MODEL="gemini-2.5-flash"
+subtitle-translator movie.srt --provider gemini --model gemini-2.5-pro
+~~~
+
+On Windows PowerShell:
+
+~~~powershell
+$env:GEMINI_API_KEY = "your_api_key_here"
+$env:GEMINI_MODEL = "gemini-2.5-flash"
+subtitle-translator movie.srt --provider gemini
+~~~
+
+Model availability, cost, limits, and translation quality differ between
+providers. Compare both providers using representative subtitle samples for
+your language pair before selecting one for a project.
+
+Gemini currently supports translation only. Gemini consistency review is not
+included in PR #8A, so `--provider gemini --consistency-report ...` is rejected.
+The standalone `review` command and OpenAI consistency reports remain
+OpenAI-only.
 
 ## Glossaries
 
@@ -91,7 +131,7 @@ subtitle-translator samples/openai_smoke_test.srt --context-size 10
 ~~~
 
 Context is limited to the current file and translation run. It is not
-persistent, does not replace an explicit glossary, and may increase OpenAI
+persistent, does not replace an explicit glossary, and may increase provider
 input usage and cost.
 
 ## Optional consistency report

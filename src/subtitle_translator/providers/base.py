@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import json
 
 from subtitle_translator.batch import (
     BatchItem,
     BatchTranslation,
     TranslationContextItem,
 )
-from subtitle_translator.glossary import Glossary
+from subtitle_translator.glossary import Glossary, glossary_to_dict
+
+
+class TranslationProviderError(RuntimeError):
+    """Raised when a translation provider cannot produce a translation."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,3 +66,32 @@ class TranslationProvider(ABC):
         request: BatchTranslationRequest,
     ) -> list[BatchTranslation]:
         """Translate a batch of text items and return their translations."""
+
+
+def serialize_batch_request(
+    request: BatchTranslationRequest,
+    *,
+    always_structured: bool = False,
+) -> str:
+    """Serialize batch data while keeping glossary, context, and items separate."""
+
+    if not always_structured and request.glossary is None and request.context is None:
+        payload: object = [{"id": item.id, "text": item.text} for item in request.items]
+    else:
+        payload = {
+            "glossary": (
+                glossary_to_dict(request.glossary)
+                if request.glossary is not None
+                else None
+            ),
+            "context": [
+                {
+                    "id": item.id,
+                    "source": item.source_text,
+                    "translation": item.translated_text,
+                }
+                for item in request.context or ()
+            ],
+            "items": [{"id": item.id, "text": item.text} for item in request.items],
+        }
+    return json.dumps(payload, ensure_ascii=False)
