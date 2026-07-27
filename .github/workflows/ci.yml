@@ -28,7 +28,7 @@ jobs:
       - name: Install project and development dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,all]"
 
       - name: Run Ruff
         run: ruff check .
@@ -80,11 +80,13 @@ jobs:
         run: |
           verification_env="$RUNNER_TEMP/subtitle-translator-wheel-${{ matrix.python-version }}"
           python -m venv "$verification_env"
-          "$verification_env/bin/python" -m pip install dist/*.whl
+          wheel_path="$(realpath dist/*.whl)"
+          "$verification_env/bin/python" -m pip install "subtitle-translator[all] @ file://$wheel_path"
 
           cd "$RUNNER_TEMP"
           PYTHONPATH= "$verification_env/bin/python" - <<'PY'
           import os
+          import sys
           from importlib.metadata import version
           from importlib.resources import files
           from pathlib import Path
@@ -100,6 +102,9 @@ jobs:
           assert resources.joinpath("batch_prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("consistency_prompt.txt").read_text(encoding="utf-8")
           assert version("subtitle-translator") == subtitle_translator.__version__
+          assert "openai" not in sys.modules
+          assert "google.genai" not in sys.modules
           PY
 
           PYTHONPATH= "$verification_env/bin/subtitle-translator" --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" translate --provider gemini --help

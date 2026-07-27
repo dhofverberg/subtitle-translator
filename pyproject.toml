@@ -16,12 +16,22 @@ authors = [
 ]
 
 dependencies = [
-    "openai>=1.99",
+    "click>=8.2",
     "typer>=0.16",
     "srt>=3.5"
 ]
 
 [project.optional-dependencies]
+openai = [
+    "openai>=1.99",
+]
+gemini = [
+    "google-genai>=1.0",
+]
+all = [
+    "openai>=1.99",
+    "google-genai>=1.0",
+]
 dev = [
     "build>=1",
     "pytest>=8",
