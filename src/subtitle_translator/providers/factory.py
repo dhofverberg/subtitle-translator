@@ -69,8 +69,8 @@ def resolve_review_model(
     resolved_config = config or load_config()
     openai_model = resolved_config.openai_model
     gemini_model = resolved_config.gemini_model
-    openai_review_model = getattr(resolved_config, "openai_review_model", None)
-    gemini_review_model = getattr(resolved_config, "gemini_review_model", None)
+    openai_review_model = resolved_config.openai_review_model
+    gemini_review_model = resolved_config.gemini_review_model
     if normalized == "openai":
         return model or openai_review_model or openai_model
     return model or gemini_review_model or gemini_model
