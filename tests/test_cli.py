@@ -16,10 +16,10 @@ from subtitle_translator.batch import BatchProtocolError
 from subtitle_translator.cli import app
 from subtitle_translator.config import Config
 from subtitle_translator.consistency import ConsistencyReport
-from subtitle_translator.providers.openai_provider import OpenAIProviderError
 from subtitle_translator.providers.openai_consistency_reviewer import (
     OpenAIConsistencyReviewerError,
 )
+from subtitle_translator.providers.openai_provider import OpenAIProviderError
 from subtitle_translator.subtitle_translation import SubtitleTranslationError
 
 runner = CliRunner()

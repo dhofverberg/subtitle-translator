@@ -50,8 +50,8 @@ def resolve_translation_model(
 
     normalized = normalize_provider_name(provider_name)
     resolved_config = config or load_config()
-    openai_model = getattr(resolved_config, "openai_model")
-    gemini_model = getattr(resolved_config, "gemini_model")
+    openai_model = resolved_config.openai_model
+    gemini_model = resolved_config.gemini_model
     if normalized == "openai":
         return model or openai_model
     return model or gemini_model
@@ -67,8 +67,8 @@ def resolve_review_model(
 
     normalized = normalize_review_provider_name(provider_name)
     resolved_config = config or load_config()
-    openai_model = getattr(resolved_config, "openai_model")
-    gemini_model = getattr(resolved_config, "gemini_model")
+    openai_model = resolved_config.openai_model
+    gemini_model = resolved_config.gemini_model
     openai_review_model = getattr(resolved_config, "openai_review_model", None)
     gemini_review_model = getattr(resolved_config, "gemini_review_model", None)
     if normalized == "openai":

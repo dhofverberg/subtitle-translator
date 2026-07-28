@@ -12,7 +12,6 @@ from subtitle_translator.consistency import (
     parse_consistency_response,
 )
 
-
 EXPECTED = (
     TranslationContextItem(10, "Grandmother\ncalled.", "Mormor\nringde."),
     TranslationContextItem(30, "Grandmother arrived.", "Farmor kom."),
