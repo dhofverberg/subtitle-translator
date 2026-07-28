@@ -8,6 +8,7 @@ from typing import Any
 from typer.testing import CliRunner
 
 from subtitle_translator.cli import app
+from subtitle_translator.consistency import ConsistencyReport, ConsistencyReviewRequest
 from subtitle_translator.srt import load_srt
 
 
@@ -36,6 +37,15 @@ class FakeModels:
 class FakeClient:
     def __init__(self) -> None:
         self.models = FakeModels()
+
+
+class FakeReviewer:
+    def __init__(self) -> None:
+        self.requests: list[ConsistencyReviewRequest] = []
+
+    def review(self, request: ConsistencyReviewRequest) -> ConsistencyReport:
+        self.requests.append(request)
+        return ConsistencyReport()
 
 
 def test_cli_gemini_translation_runs_full_srt_pipeline_with_context_and_glossary(
@@ -108,12 +118,22 @@ The café is open.
     ]
 
 
-def test_cli_rejects_gemini_consistency_report_before_client_creation(monkeypatch, tmp_path: Path):
+def test_cli_supports_gemini_translation_and_gemini_review(monkeypatch, tmp_path: Path):
     input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "movie.translated.srt"
+    report_path = tmp_path / "movie.consistency.md"
     input_path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    client = FakeClient()
+    reviewer = FakeReviewer()
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-env-model")
     monkeypatch.setattr(
-        "subtitle_translator.cli.GeminiProvider",
-        lambda *, model=None: (_ for _ in ()).throw(AssertionError("must not construct")),
+        "subtitle_translator.providers.gemini_provider.genai.Client",
+        lambda *, api_key: client,
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.GeminiConsistencyReviewer",
+        lambda *, model=None: reviewer,
     )
 
     result = CliRunner().invoke(
@@ -122,10 +142,16 @@ def test_cli_rejects_gemini_consistency_report_before_client_creation(monkeypatc
             str(input_path),
             "--provider",
             "gemini",
+            "--output",
+            str(output_path),
             "--consistency-report",
-            str(tmp_path / "report.md"),
+            str(report_path),
         ],
     )
 
-    assert result.exit_code != 0
-    assert "does not support --consistency-report yet" in result.output
+    assert result.exit_code == 0
+    assert output_path.exists()
+    assert report_path.exists()
+    assert len(client.models.calls) == 1
+    assert len(reviewer.requests) == 1
+    assert [item.id for item in reviewer.requests[0].items] == [1]

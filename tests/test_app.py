@@ -469,3 +469,373 @@ def test_review_srt_files_does_not_modify_existing_files(tmp_path: Path):
 
     assert source_path.read_bytes() == source_bytes
     assert translated_path.read_bytes() == translated_bytes
+
+
+def test_review_srt_files_supports_nonsequential_matching_ids(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+First line
+
+30
+00:00:03,000 --> 00:00:04,000
+Second line
+""",
+        encoding="utf-8",
+    )
+    translated_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+Första raden
+
+30
+00:00:03,000 --> 00:00:04,000
+Andra raden
+""",
+        encoding="utf-8",
+    )
+    reviewer = FakeReviewer()
+
+    finding_count = review_srt_files(
+        source_path=source_path,
+        translated_path=translated_path,
+        report_path=report_path,
+        reviewer=reviewer,
+        source_language="English",
+        target_language="Swedish",
+    )
+
+    assert finding_count == 0
+    assert [item.id for item in reviewer.requests[0].items] == [10, 30]
+
+
+def test_review_srt_files_passes_none_glossary_when_not_supplied(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    review_srt_files(
+        source_path=source_path,
+        translated_path=translated_path,
+        report_path=report_path,
+        reviewer=reviewer,
+        source_language="English",
+        target_language="Swedish",
+    )
+
+    assert reviewer.requests[0].glossary is None
+
+
+def test_review_srt_files_accepts_empty_matching_files(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("", encoding="utf-8")
+    translated_path.write_text("", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    finding_count = review_srt_files(
+        source_path=source_path,
+        translated_path=translated_path,
+        report_path=report_path,
+        reviewer=reviewer,
+        source_language="English",
+        target_language="Swedish",
+    )
+
+    assert finding_count == 0
+    assert reviewer.requests == []
+    assert "No likely consistency issues were identified." in report_path.read_text(
+        encoding="utf-8"
+    )
+
+
+def test_review_srt_files_rejects_subtitle_id_mismatch_before_reviewer_call(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("20\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    with pytest.raises(SubtitlePairValidationError, match="Subtitle ID mismatch"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert not report_path.exists()
+
+
+def test_review_srt_files_rejects_start_timestamp_mismatch_before_reviewer_call(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,500 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    with pytest.raises(SubtitlePairValidationError, match="Start timestamp mismatch"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert not report_path.exists()
+
+
+def test_review_srt_files_rejects_end_timestamp_mismatch_before_reviewer_call(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,500\nHej\n", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    with pytest.raises(SubtitlePairValidationError, match="End timestamp mismatch"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert not report_path.exists()
+
+
+def test_review_srt_files_rejects_duplicate_source_ids_before_reviewer_call(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+Hello
+
+10
+00:00:03,000 --> 00:00:04,000
+Again
+""",
+        encoding="utf-8",
+    )
+    translated_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+Hej
+
+10
+00:00:03,000 --> 00:00:04,000
+Igen
+""",
+        encoding="utf-8",
+    )
+    reviewer = FakeReviewer()
+
+    with pytest.raises(SubtitlePairValidationError, match="Duplicate subtitle index in source"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert not report_path.exists()
+
+
+def test_review_srt_files_rejects_duplicate_translated_ids_before_reviewer_call(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+Hello
+
+20
+00:00:03,000 --> 00:00:04,000
+Again
+""",
+        encoding="utf-8",
+    )
+    translated_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+Hej
+
+10
+00:00:03,000 --> 00:00:04,000
+Igen
+""",
+        encoding="utf-8",
+    )
+    reviewer = FakeReviewer()
+
+    with pytest.raises(
+        SubtitlePairValidationError,
+        match="Duplicate subtitle index in translated",
+    ):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert not report_path.exists()
+
+
+def test_review_srt_files_rejects_identical_source_and_translated_paths(tmp_path: Path):
+    source_path = tmp_path / "same.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    with pytest.raises(SubtitlePairValidationError, match="must be different"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=source_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert not report_path.exists()
+
+
+@pytest.mark.parametrize("report_name", ["source.srt", "translated.srt"])
+def test_review_srt_files_rejects_report_path_equal_to_input_files(
+    tmp_path: Path,
+    report_name: str,
+):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    with pytest.raises(SubtitlePairValidationError, match="Report path must differ"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=tmp_path / report_name,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+
+
+def test_review_srt_files_rejects_existing_report_before_reviewer_call(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    report_path.write_text("existing", encoding="utf-8")
+    reviewer = FakeReviewer()
+
+    with pytest.raises(FileExistsError, match="Report file already exists"):
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=reviewer,
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert reviewer.requests == []
+    assert report_path.read_text(encoding="utf-8") == "existing"
+
+
+def test_review_srt_files_review_provider_failure_leaves_no_report(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    source_bytes = source_path.read_bytes()
+    translated_bytes = translated_path.read_bytes()
+    reviewer_error = ConsistencyReviewerError("Authorization: ******")
+
+    with pytest.raises(
+        ConsistencyReportGenerationError,
+        match="Consistency review provider failed",
+    ) as exc_info:
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=FakeReviewer(error=reviewer_error),
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert exc_info.value.__cause__ is reviewer_error
+    assert not report_path.exists()
+    assert source_path.read_bytes() == source_bytes
+    assert translated_path.read_bytes() == translated_bytes
+
+
+def test_review_srt_files_report_write_failure_leaves_no_partial_report(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    source_bytes = source_path.read_bytes()
+    translated_bytes = translated_path.read_bytes()
+
+    def fail_write(report_text: str, path: Path) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("subtitle_translator.app.save_consistency_report", fail_write)
+
+    with pytest.raises(
+        ConsistencyReportGenerationError,
+        match="Consistency report writing failed",
+    ) as exc_info:
+        review_srt_files(
+            source_path=source_path,
+            translated_path=translated_path,
+            report_path=report_path,
+            reviewer=FakeReviewer(),
+            source_language="English",
+            target_language="Swedish",
+        )
+
+    assert isinstance(exc_info.value.__cause__, OSError)
+    assert not report_path.exists()
+    assert source_path.read_bytes() == source_bytes
+    assert translated_path.read_bytes() == translated_bytes

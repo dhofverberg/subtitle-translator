@@ -9,7 +9,7 @@ from enum import StrEnum
 from typing import Any
 
 from .batch import TranslationContextItem
-from .glossary import Glossary
+from .glossary import Glossary, glossary_to_dict
 
 
 class ConsistencyProtocolError(ValueError):
@@ -86,6 +86,29 @@ class ConsistencyReviewer(ABC):
     @abstractmethod
     def review(self, request: ConsistencyReviewRequest) -> ConsistencyReport:
         """Review accepted subtitle pairs without modifying them."""
+
+
+def serialize_consistency_review_request(request: ConsistencyReviewRequest) -> str:
+    """Serialize review input as structured untrusted data for providers."""
+
+    payload = {
+        "source_language": request.source_language,
+        "target_language": request.target_language,
+        "glossary": (
+            glossary_to_dict(request.glossary)
+            if request.glossary is not None
+            else None
+        ),
+        "subtitle_pairs": [
+            {
+                "id": item.id,
+                "source": item.source_text,
+                "translation": item.translated_text,
+            }
+            for item in request.items
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def parse_consistency_response(

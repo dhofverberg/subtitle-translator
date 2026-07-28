@@ -9,6 +9,8 @@ from .base import (
 
 __all__ = [
     "BatchTranslationRequest",
+    "GeminiConsistencyReviewer",
+    "GeminiConsistencyReviewerError",
     "OpenAIConsistencyReviewer",
     "OpenAIConsistencyReviewerError",
     "OpenAIProvider",
@@ -45,5 +47,15 @@ def __getattr__(name: str) -> object:
         return {
             "GeminiProvider": GeminiProvider,
             "GeminiProviderError": GeminiProviderError,
+        }[name]
+    if name in {"GeminiConsistencyReviewer", "GeminiConsistencyReviewerError"}:
+        from .gemini_consistency_reviewer import (
+            GeminiConsistencyReviewer,
+            GeminiConsistencyReviewerError,
+        )
+
+        return {
+            "GeminiConsistencyReviewer": GeminiConsistencyReviewer,
+            "GeminiConsistencyReviewerError": GeminiConsistencyReviewerError,
         }[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
