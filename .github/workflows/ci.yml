@@ -107,4 +107,7 @@ jobs:
           PY
 
           PYTHONPATH= "$verification_env/bin/subtitle-translator" --help
-          PYTHONPATH= "$verification_env/bin/subtitle-translator" translate --provider gemini --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" translate --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" translate --provider gemini --review-provider openai --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" review --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" review --provider gemini --help

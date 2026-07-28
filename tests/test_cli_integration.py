@@ -119,7 +119,8 @@ Café 👋
     )
 
     assert result.exit_code == 0
-    assert f"Translation complete: {output_path}" in result.output
+    assert "Translation complete." in result.output
+    assert f"Output: {output_path}" in result.output
     assert models == ["integration-model"]
     assert [[item.id for item in call.items] for call in provider.calls] == [[10], [20]]
     assert [
@@ -243,7 +244,16 @@ Mormor ringde.
     )
     monkeypatch.setattr(
         "subtitle_translator.cli.load_config",
-        lambda: type("Config", (), {"openai_model": "configured-model"})(),
+        lambda: type(
+            "Config",
+            (),
+            {
+                "openai_model": "configured-model",
+                "openai_review_model": None,
+                "gemini_model": "gemini-2.5-flash",
+                "gemini_review_model": None,
+            },
+        )(),
     )
 
     result = CliRunner().invoke(
@@ -323,8 +333,10 @@ Grandmother will return.
     )
 
     assert result.exit_code == 0
-    assert f"Translation complete: {output_path}" in result.output
-    assert f"Consistency report complete: {report_path}" in result.output
+    assert "Translation complete." in result.output
+    assert f"Output: {output_path}" in result.output
+    assert "Consistency review complete." in result.output
+    assert f"Report: {report_path}" in result.output
     translated = load_srt(output_path)
     assert [subtitle.index for subtitle in translated.subtitles] == [10, 30, 50]
     assert [subtitle.start for subtitle in translated.subtitles] == [
@@ -348,3 +360,147 @@ Grandmother will return.
     assert "person_or_relationship" in report_text
     assert "Subtitle IDs: 10, 50" in report_text
     assert "false positives" in report_text
+
+
+def test_cli_integration_supports_openai_translation_and_gemini_review(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "movie.translated.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    input_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+Hello
+""",
+        encoding="utf-8",
+    )
+    openai_provider = FakeProvider()
+    gemini_reviewer = FakeReviewer()
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIProvider", lambda *, model=None: openai_provider)
+    monkeypatch.setattr("subtitle_translator.cli.GeminiProvider", lambda *, model=None: FakeProvider())
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: FakeReviewer(),
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.GeminiConsistencyReviewer",
+        lambda *, model=None: gemini_reviewer,
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            str(input_path),
+            "--output",
+            str(output_path),
+            "--consistency-report",
+            str(report_path),
+            "--review-provider",
+            "gemini",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Provider: openai" in result.output
+    assert "Consistency review complete. Provider: gemini" in result.output
+    assert len(openai_provider.calls) == 1
+    assert len(gemini_reviewer.requests) == 1
+
+
+def test_cli_integration_supports_gemini_translation_and_openai_review(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    output_path = tmp_path / "movie.translated.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    input_path.write_text(
+        """10
+00:00:01,000 --> 00:00:02,000
+Hello
+""",
+        encoding="utf-8",
+    )
+    gemini_provider = FakeProvider()
+    openai_reviewer = FakeReviewer()
+    monkeypatch.setattr("subtitle_translator.cli.GeminiProvider", lambda *, model=None: gemini_provider)
+    monkeypatch.setattr("subtitle_translator.cli.OpenAIProvider", lambda *, model=None: FakeProvider())
+    monkeypatch.setattr(
+        "subtitle_translator.cli.GeminiConsistencyReviewer",
+        lambda *, model=None: FakeReviewer(),
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: openai_reviewer,
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            str(input_path),
+            "--provider",
+            "gemini",
+            "--output",
+            str(output_path),
+            "--consistency-report",
+            str(report_path),
+            "--review-provider",
+            "openai",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Provider: gemini" in result.output
+    assert "Consistency review complete. Provider: openai" in result.output
+    assert len(gemini_provider.calls) == 1
+    assert len(openai_reviewer.requests) == 1
+
+
+def test_cli_integration_supports_standalone_gemini_review_without_translation_provider(
+    monkeypatch,
+    tmp_path: Path,
+):
+    source_path = tmp_path / "movie.en.srt"
+    translated_path = tmp_path / "movie.sv.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    source_path.write_text(
+        "10\n00:00:01,000 --> 00:00:02,000\nHello\n",
+        encoding="utf-8",
+    )
+    translated_path.write_text(
+        "10\n00:00:01,000 --> 00:00:02,000\nHej\n",
+        encoding="utf-8",
+    )
+    gemini_reviewer = FakeReviewer()
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIProvider",
+        lambda *, model=None: (_ for _ in ()).throw(AssertionError("must not translate")),
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.GeminiProvider",
+        lambda *, model=None: (_ for _ in ()).throw(AssertionError("must not translate")),
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.GeminiConsistencyReviewer",
+        lambda *, model=None: gemini_reviewer,
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--provider",
+            "gemini",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "No translation was performed" in result.output
+    assert "Provider: gemini" in result.output
+    assert len(gemini_reviewer.requests) == 1

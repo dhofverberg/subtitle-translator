@@ -37,7 +37,7 @@ Install the provider support you need:
 
 ~~~bash
 python -m pip install -e ".[openai]"       # OpenAI translation and review
-python -m pip install -e ".[gemini]"       # Gemini translation only
+python -m pip install -e ".[gemini]"       # Gemini translation and review
 python -m pip install -e ".[all]"          # Both providers
 python -m pip install -e ".[dev,all]"      # Both providers plus development tools
 ~~~
@@ -76,14 +76,16 @@ $env:GEMINI_MODEL = "gemini-2.5-flash"
 subtitle-translator movie.srt --provider gemini
 ~~~
 
-Model availability, cost, limits, and translation quality differ between
+Model availability, cost, limits, and translation/review quality differ between
 providers. Compare both providers using representative subtitle samples for
 your language pair before selecting one for a project.
 
-Gemini currently supports translation only. Gemini consistency review is not
-included in PR #8A, so `--provider gemini --consistency-report ...` is rejected.
-The standalone `review` command and OpenAI consistency reports remain
-OpenAI-only.
+Credential requirements depend on provider choices:
+
+- OpenAI translation/review needs `OPENAI_API_KEY`
+- Gemini translation/review needs `GEMINI_API_KEY`
+- Mixed-provider translation+review (for example Gemini translation with OpenAI
+  review) requires both provider credentials
 
 ## Glossaries
 
@@ -137,12 +139,38 @@ input usage and cost.
 ## Optional consistency report
 
 Use `--consistency-report PATH` to run a separate advisory review after the
-translated SRT has been saved:
+translated SRT has been saved. By default, the review provider matches the
+translation provider:
 
 ~~~bash
 subtitle-translator movie.srt \
+  --provider gemini \
   --source-language English \
   --target-language Swedish \
+  --consistency-report movie.consistency.md
+~~~
+
+Use `--review-provider` to review with a different provider than the one used
+for translation:
+
+~~~bash
+subtitle-translator movie.srt \
+  --provider gemini \
+  --review-provider openai \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+~~~
+
+Use `--review-model` to override only the consistency-review model (independent
+from `--model`, which controls translation):
+
+~~~bash
+subtitle-translator movie.srt \
+  --provider openai \
+  --model gpt-5.5 \
+  --review-provider gemini \
+  --review-model gemini-2.5-pro \
   --consistency-report movie.consistency.md
 ~~~
 
@@ -151,9 +179,13 @@ inspection. For example, it may cite exact subtitle IDs where the same
 "grandmother" appears as both "mormor" and "farmor" and suggest checking which
 family relationship is intended.
 
-This review makes additional paid OpenAI API requests. It never changes or
-rewrites the translated SRT. Findings are advisory, require manual review, and
-may include false positives.
+This review makes additional paid API requests. It never changes or rewrites
+the translated SRT. Findings are advisory, require manual review, and may
+include false positives.
+
+Review quality can differ between providers. Running a second-provider review
+can catch issues that the translating provider missed, but this is not
+guaranteed.
 
 The three consistency features serve different purposes:
 
@@ -166,10 +198,12 @@ The three consistency features serve different purposes:
 ## Standalone consistency review of existing subtitle files
 
 Use the `review` command to generate a consistency report from existing source
-and translated SRT files without re-translating:
+and translated SRT files without re-translating. OpenAI remains the default
+review provider for backward compatibility.
 
 ~~~bash
 subtitle-translator review movie.en.srt movie.sv.srt \
+  --provider gemini \
   --source-language English \
   --target-language Swedish \
   --consistency-report movie.consistency.md
@@ -199,6 +233,7 @@ Supply a glossary with `--glossary PATH` exactly as with translation:
 subtitle-translator review movie.en.srt movie.sv.srt \
   --source-language English \
   --target-language Swedish \
+  --provider gemini \
   --glossary glossary.json \
   --consistency-report movie.consistency.md
 ~~~
@@ -208,12 +243,29 @@ Glossary languages must match the requested source and target languages.
 ### Important notes
 
 - **No translation occurs** — neither source nor translated SRT is modified
-- **Additional API requests** — the review makes separate, paid OpenAI API calls
+- **Additional API requests** — the review makes separate, paid provider API calls
   for consistency analysis
 - **Advisory only** — all findings require manual review and may include false
   positives
 - **Cannot realign subtitles** — files must already have matching structure;
   automatic alignment is not performed
+- **No automatic corrections** — neither reviewer rewrites subtitle text
+- **Retry-friendly** — a failed review does not require retranslation; run the
+  standalone `review` command later
+
+### Review model environment variables
+
+Review model selection order is:
+
+1. `--review-model` (or `--model` for standalone `review`)
+2. Provider-specific review model environment variable
+3. Provider normal model environment variable
+4. Provider default
+
+Supported environment variables:
+
+- `OPENAI_REVIEW_MODEL`
+- `GEMINI_REVIEW_MODEL`
 
 ### Difference: translate with report vs. standalone review
 

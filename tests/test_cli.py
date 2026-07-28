@@ -15,10 +15,11 @@ from subtitle_translator.app import (
 from subtitle_translator.batch import BatchProtocolError
 from subtitle_translator.cli import app
 from subtitle_translator.config import Config
-from subtitle_translator.providers.openai_provider import OpenAIProviderError
+from subtitle_translator.consistency import ConsistencyReport
 from subtitle_translator.providers.openai_consistency_reviewer import (
     OpenAIConsistencyReviewerError,
 )
+from subtitle_translator.providers.openai_provider import OpenAIProviderError
 from subtitle_translator.subtitle_translation import SubtitleTranslationError
 
 runner = CliRunner()
@@ -92,7 +93,8 @@ def test_cli_uses_explicit_output_and_shows_success(monkeypatch, tmp_path: Path)
     assert calls[0]["input_path"] == input_path
     assert calls[0]["output_path"] == output_path
     assert calls[0]["context_size"] == 10
-    assert f"Translation complete: {output_path}" in result.output
+    assert "Translation complete." in result.output
+    assert f"Output: {output_path}" in result.output
 
 
 def test_cli_derives_safe_output_path(monkeypatch, tmp_path: Path):
@@ -264,7 +266,8 @@ def test_cli_review_command_succeeds_and_reports_no_translation(monkeypatch, tmp
         assert kwargs["source_path"] == source_path
         assert kwargs["translated_path"] == translated_path
         assert kwargs["report_path"] == report_path
-        assert kwargs["reviewer"] is reviewer
+        assert callable(kwargs["reviewer"])
+        assert kwargs["reviewer"]() is reviewer
         assert kwargs["source_language"] == "English"
         assert kwargs["target_language"] == "Swedish"
         return 2
@@ -320,6 +323,213 @@ def test_cli_review_rejects_missing_source_file(tmp_path: Path):
 
     assert result.exit_code != 0
     assert "Source file does not exist" in result.output
+
+
+def test_cli_review_rejects_missing_translated_file(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    source_path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(tmp_path / "missing-translated.srt"),
+            "--consistency-report",
+            str(tmp_path / "report.md"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Translated file does not exist" in result.output
+
+
+def test_cli_review_rejects_existing_report_path(tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    report_path.write_text("existing", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Report file already exists" in result.output
+    assert report_path.read_text(encoding="utf-8") == "existing"
+
+
+def test_cli_review_rejects_incompatible_subtitle_files(monkeypatch, tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("1\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("2\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+
+    class CountingReviewer:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def review(self, request: Any) -> Any:
+            self.calls += 1
+            raise AssertionError("review should not be called for invalid subtitle pairs")
+
+    reviewer = CountingReviewer()
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: reviewer,
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key="sk-test", openai_model="configured-model"),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Incompatible subtitle files" in result.output
+    assert "Subtitle ID mismatch" in result.output
+    assert reviewer.calls == 0
+    assert not report_path.exists()
+
+
+def test_cli_review_forwards_model_override_to_reviewer(monkeypatch, tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+    models: list[str | None] = []
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key="sk-test", openai_model="configured-model"),
+    )
+
+    class FakeReviewRunner:
+        def review(self, request: Any) -> Any:
+            return ConsistencyReport()
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: models.append(model) or FakeReviewRunner(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--consistency-report",
+            str(report_path),
+            "--model",
+            "override-model",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert models == ["override-model"]
+
+
+def test_cli_review_failures_use_non_zero_exit_code(monkeypatch, tmp_path: Path):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,000 --> 00:00:02,000\nHej\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(openai_api_key="sk-test", openai_model="configured-model"),
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: (_ for _ in ()).throw(OpenAIConsistencyReviewerError("secret")),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Existing translated SRT was not changed" in result.output
+
+
+def test_cli_review_command_supports_gemini_provider_and_review_model_alias(
+    monkeypatch,
+    tmp_path: Path,
+):
+    source_path = tmp_path / "source.srt"
+    translated_path = tmp_path / "translated.srt"
+    report_path = tmp_path / "report.md"
+    source_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHello\n", encoding="utf-8")
+    translated_path.write_text("10\n00:00:01,250 --> 00:00:03,500\nHallo\n", encoding="utf-8")
+    created: list[str] = []
+    reviewer = object()
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(
+            openai_api_key="sk-test",
+            openai_model="openai-model",
+            gemini_api_key="gemini-key",
+            gemini_model="gemini-model",
+            gemini_review_model="gemini-review-model",
+        ),
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.GeminiConsistencyReviewer",
+        lambda *, model=None: created.append(str(model)) or reviewer,
+    )
+    monkeypatch.setattr(
+        "subtitle_translator.cli.review_srt_files",
+        lambda **kwargs: kwargs["reviewer"]() is reviewer and 0,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "review",
+            str(source_path),
+            str(translated_path),
+            "--provider",
+            "gemini",
+            "--review-model",
+            "gemini-review-override",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert created == ["gemini-review-override"]
+    assert "Provider: gemini Model: gemini-review-override" in result.output
 
 
 def test_cli_review_rejects_glossary_language_mismatch(monkeypatch, tmp_path: Path):
@@ -401,6 +611,8 @@ def test_cli_help_documents_glossary_context_and_consistency_options():
     assert "--glossary" in result.output
     assert "--context-size" in result.output
     assert "--consistency-report" in result.output
+    assert "--review-provider" in result.output
+    assert "--review-model" in result.output
 
 
 def test_cli_without_report_does_not_construct_reviewer(
@@ -450,10 +662,13 @@ def test_cli_forwards_report_path_and_resolved_model(monkeypatch, tmp_path: Path
     )
 
     assert result.exit_code == 0
+    assert callable(calls[0]["consistency_reviewer"])
+    created_reviewer = calls[0]["consistency_reviewer"]()
     assert reviewers[0][0] == "configured-model"
-    assert calls[0]["consistency_reviewer"] is reviewers[0][1]
+    assert created_reviewer is reviewers[0][1]
     assert calls[0]["consistency_report_path"] == report_path
-    assert f"Consistency report complete: {report_path}" in result.output
+    assert "Consistency review complete." in result.output
+    assert f"Report: {report_path}" in result.output
 
 
 def test_cli_rejects_existing_report_before_provider_creation(
@@ -550,6 +765,16 @@ def test_cli_sanitizes_reviewer_initialization_errors(monkeypatch, tmp_path: Pat
         "subtitle_translator.cli.OpenAIConsistencyReviewer",
         fail_reviewer,
     )
+    def invoke_reviewer_then_fail(**kwargs: Any) -> None:
+        kwargs["output_path"].write_text("translated", encoding="utf-8")
+        reviewer_factory = kwargs["consistency_reviewer"]
+        assert callable(reviewer_factory)
+        reviewer_factory()
+
+    monkeypatch.setattr(
+        "subtitle_translator.cli.translate_srt_file",
+        invoke_reviewer_then_fail,
+    )
 
     result = runner.invoke(
         app,
@@ -560,7 +785,206 @@ def test_cli_sanitizes_reviewer_initialization_errors(monkeypatch, tmp_path: Pat
     assert "Consistency review provider failed" in result.output
     assert secret not in result.output
     assert len(providers) == 1
-    assert calls == []
+    assert len(calls) == 0
+
+
+def test_cli_review_provider_defaults_to_translation_provider_when_report_enabled(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+    created: list[str] = []
+
+    def create_gemini_reviewer(*, model=None):
+        created.append(f"gemini:{model}")
+        return object()
+
+    monkeypatch.setattr("subtitle_translator.cli.GeminiConsistencyReviewer", create_gemini_reviewer)
+    monkeypatch.setattr("subtitle_translator.cli.GeminiProvider", lambda *, model=None: object())
+
+    result = runner.invoke(
+        app,
+        [
+            str(input_path),
+            "--provider",
+            "gemini",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    reviewer_factory = calls[0]["consistency_reviewer"]
+    assert callable(reviewer_factory)
+    reviewer_factory()
+    assert created == ["gemini:gemini-2.5-flash"]
+
+
+def test_cli_review_provider_override_uses_selected_review_provider(
+    monkeypatch,
+    tmp_path: Path,
+):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+    created: list[str] = []
+
+    monkeypatch.setattr("subtitle_translator.cli.GeminiProvider", lambda *, model=None: object())
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: created.append(f"openai:{model}") or object(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            str(input_path),
+            "--provider",
+            "gemini",
+            "--review-provider",
+            "openai",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    reviewer_factory = calls[0]["consistency_reviewer"]
+    assert callable(reviewer_factory)
+    reviewer_factory()
+    assert created == ["openai:configured-model"]
+
+
+def test_cli_review_model_explicit_override_wins(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+    created: list[str] = []
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: created.append(str(model)) or object(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            str(input_path),
+            "--consistency-report",
+            str(report_path),
+            "--review-model",
+            "review-override",
+        ],
+    )
+
+    assert result.exit_code == 0
+    calls[0]["consistency_reviewer"]()
+    assert created == ["review-override"]
+
+
+def test_cli_uses_openai_review_model_environment_when_set(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(
+            openai_api_key="sk-test-key",
+            openai_model="openai-normal",
+            openai_review_model="openai-review",
+            gemini_api_key="gemini-key",
+            gemini_model="gemini-normal",
+            gemini_review_model="gemini-review",
+        ),
+    )
+    created: list[str] = []
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: created.append(str(model)) or object(),
+    )
+
+    result = runner.invoke(
+        app,
+        [str(input_path), "--consistency-report", str(report_path)],
+    )
+
+    assert result.exit_code == 0
+    calls[0]["consistency_reviewer"]()
+    assert created == ["openai-review"]
+
+
+def test_cli_uses_gemini_review_model_environment_when_set(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    _, calls = install_cli_fakes(monkeypatch)
+    monkeypatch.setattr("subtitle_translator.cli.GeminiProvider", lambda *, model=None: object())
+    monkeypatch.setattr(
+        "subtitle_translator.cli.load_config",
+        lambda: Config(
+            openai_api_key="sk-test-key",
+            openai_model="openai-normal",
+            openai_review_model="openai-review",
+            gemini_api_key="gemini-key",
+            gemini_model="gemini-normal",
+            gemini_review_model="gemini-review",
+        ),
+    )
+    created: list[str] = []
+    monkeypatch.setattr(
+        "subtitle_translator.cli.GeminiConsistencyReviewer",
+        lambda *, model=None: created.append(str(model)) or object(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            str(input_path),
+            "--provider",
+            "gemini",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    calls[0]["consistency_reviewer"]()
+    assert created == ["gemini-review"]
+
+
+def test_cli_translation_model_and_review_model_are_independent(monkeypatch, tmp_path: Path):
+    input_path = tmp_path / "movie.srt"
+    report_path = tmp_path / "movie.consistency.md"
+    write_input(input_path)
+    providers, calls = install_cli_fakes(monkeypatch)
+    created: list[str] = []
+    monkeypatch.setattr(
+        "subtitle_translator.cli.OpenAIConsistencyReviewer",
+        lambda *, model=None: created.append(str(model)) or object(),
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            str(input_path),
+            "--model",
+            "translation-model",
+            "--review-model",
+            "review-model",
+            "--consistency-report",
+            str(report_path),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert providers[0][0] == "translation-model"
+    calls[0]["consistency_reviewer"]()
+    assert created == ["review-model"]
 
 
 def test_cli_rejects_invalid_batch_size_before_translation(monkeypatch, tmp_path: Path):

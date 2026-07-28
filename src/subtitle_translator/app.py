@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 
 from .consistency import (
@@ -36,11 +37,11 @@ def translate_srt_file(
     batch_size: int,
     glossary: Glossary | None = None,
     context_size: int = 10,
-    consistency_reviewer: ConsistencyReviewer | None = None,
+    consistency_reviewer: ConsistencyReviewer | Callable[[], ConsistencyReviewer] | None = None,
     consistency_report_path: Path | None = None,
     review_chunk_size: int = 100,
     review_overlap: int = 10,
-) -> None:
+) -> int | None:
     """Load, translate, and save an SRT subtitle file."""
 
     if input_path.resolve() == output_path.resolve():
@@ -75,14 +76,20 @@ def translate_srt_file(
     )
     translated_file = service.translate(subtitle_file)
     save_srt(translated_file, output_path)
+    finding_count: int | None = None
 
     if consistency_reviewer is not None and consistency_report_path is not None:
         try:
-            _write_consistency_report(
+            resolved_reviewer = (
+                consistency_reviewer()
+                if callable(consistency_reviewer)
+                else consistency_reviewer
+            )
+            report = _write_consistency_report(
                 source_file=subtitle_file,
                 translated_file=translated_file,
                 report_path=consistency_report_path,
-                reviewer=consistency_reviewer,
+                reviewer=resolved_reviewer,
                 source_language=source_language,
                 target_language=target_language,
                 glossary=glossary,
@@ -91,6 +98,7 @@ def translate_srt_file(
                 review_chunk_size=review_chunk_size,
                 review_overlap=review_overlap,
             )
+            finding_count = len(report.findings)
         except (
             ConsistencyProtocolError,
             ConsistencyReviewerError,
@@ -100,6 +108,8 @@ def translate_srt_file(
             raise ConsistencyReportGenerationError(
                 "Translation succeeded, but consistency review failed."
             ) from exc
+
+    return finding_count
 
 
 def _write_consistency_report(
@@ -141,7 +151,7 @@ def review_srt_files(
     source_path: Path,
     translated_path: Path,
     report_path: Path,
-    reviewer: ConsistencyReviewer,
+    reviewer: ConsistencyReviewer | Callable[[], ConsistencyReviewer],
     source_language: str,
     target_language: str,
     glossary: Glossary | None = None,
@@ -171,13 +181,14 @@ def review_srt_files(
     translated_file = load_srt(translated_path)
 
     _validate_subtitle_pairs(source_file, translated_file)
+    resolved_reviewer = reviewer() if callable(reviewer) else reviewer
 
     try:
         report = _write_consistency_report(
             source_file=source_file,
             translated_file=translated_file,
             report_path=report_path,
-            reviewer=reviewer,
+            reviewer=resolved_reviewer,
             source_language=source_language,
             target_language=target_language,
             glossary=glossary,
@@ -186,14 +197,17 @@ def review_srt_files(
             review_chunk_size=review_chunk_size,
             review_overlap=review_overlap,
         )
+    except OSError as exc:
+        raise ConsistencyReportGenerationError(
+            "Consistency report writing failed."
+        ) from exc
     except (
         ConsistencyProtocolError,
         ConsistencyReviewerError,
         ConsistencyReviewError,
-        OSError,
     ) as exc:
         raise ConsistencyReportGenerationError(
-            "Consistency review failed."
+            "Consistency review provider failed."
         ) from exc
 
     return len(report.findings)

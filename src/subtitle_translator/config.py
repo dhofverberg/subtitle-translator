@@ -15,8 +15,10 @@ class Config:
 
     openai_api_key: str | None = None
     openai_model: str = DEFAULT_OPENAI_MODEL
+    openai_review_model: str | None = None
     gemini_api_key: str | None = None
     gemini_model: str = DEFAULT_GEMINI_MODEL
+    gemini_review_model: str | None = None
 
 
 def load_config() -> Config:
@@ -25,6 +27,8 @@ def load_config() -> Config:
     return Config(
         openai_api_key=os.environ.get("OPENAI_API_KEY"),
         openai_model=os.environ.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
+        openai_review_model=os.environ.get("OPENAI_REVIEW_MODEL"),
         gemini_api_key=os.environ.get("GEMINI_API_KEY"),
         gemini_model=os.environ.get("GEMINI_MODEL", DEFAULT_GEMINI_MODEL),
+        gemini_review_model=os.environ.get("GEMINI_REVIEW_MODEL"),
     )

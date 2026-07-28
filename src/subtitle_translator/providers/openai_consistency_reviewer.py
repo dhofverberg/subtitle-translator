@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from openai import OpenAI, OpenAIError
@@ -15,8 +14,9 @@ from subtitle_translator.consistency import (
     ConsistencyReviewerError,
     ConsistencyReviewRequest,
     parse_consistency_response,
+    serialize_consistency_review_request,
 )
-from subtitle_translator.glossary import glossary_to_dict, validate_glossary_languages
+from subtitle_translator.glossary import validate_glossary_languages
 from subtitle_translator.prompts import build_consistency_prompt
 
 
@@ -55,7 +55,7 @@ class OpenAIConsistencyReviewer(ConsistencyReviewer):
                     request.source_language,
                     request.target_language,
                 ),
-                input=_serialize_consistency_request(request),
+                input=serialize_consistency_review_request(request),
             )
         except OpenAIError as exc:
             raise OpenAIConsistencyReviewerError(
@@ -72,24 +72,3 @@ class OpenAIConsistencyReviewer(ConsistencyReviewer):
             raise OpenAIConsistencyReviewerError(
                 f"OpenAI returned an invalid consistency review: {exc}"
             ) from exc
-
-
-def _serialize_consistency_request(request: ConsistencyReviewRequest) -> str:
-    payload = {
-        "source_language": request.source_language,
-        "target_language": request.target_language,
-        "glossary": (
-            glossary_to_dict(request.glossary)
-            if request.glossary is not None
-            else None
-        ),
-        "subtitle_pairs": [
-            {
-                "id": item.id,
-                "source": item.source_text,
-                "translation": item.translated_text,
-            }
-            for item in request.items
-        ],
-    }
-    return json.dumps(payload, ensure_ascii=False)

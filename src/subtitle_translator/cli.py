@@ -21,9 +21,13 @@ from .glossary import GlossaryError, load_glossary
 from .providers.base import TranslationProviderError
 from .providers.factory import (
     TranslationProviderConfigurationError,
+    create_consistency_reviewer,
     create_openai_consistency_reviewer,
     create_translation_provider,
     normalize_provider_name,
+    normalize_review_provider_name,
+    resolve_review_model,
+    resolve_translation_model,
 )
 from .subtitle_translation import SubtitleTranslationError
 
@@ -49,6 +53,12 @@ def OpenAIConsistencyReviewer(*, model: str | None = None) -> object:
     """Construct the OpenAI-only reviewer lazily for legacy CLI test seams."""
 
     return create_openai_consistency_reviewer(model=model)
+
+
+def GeminiConsistencyReviewer(*, model: str | None = None) -> object:
+    """Construct the Gemini-only reviewer lazily for CLI test seams."""
+
+    return create_consistency_reviewer("gemini", model=model)
 
 
 class LegacyCompatibleGroup(click.Group):
@@ -90,7 +100,9 @@ class LegacyCompatibleGroup(click.Group):
             target_language=parsed.get("target_language", DEFAULT_TARGET_LANGUAGE),
             batch_size=parsed.get("batch_size", DEFAULT_BATCH_SIZE),
             model=parsed.get("model"),
+            review_model=parsed.get("review_model"),
             provider_name=parsed.get("provider_name", "openai"),
+            review_provider_name=parsed.get("review_provider_name"),
             glossary_path=parsed.get("glossary_path"),
             context_size=parsed.get("context_size", DEFAULT_CONTEXT_SIZE),
             consistency_report=parsed.get("consistency_report"),
@@ -118,12 +130,18 @@ typer.testing._get_command = _get_click_command_for_compat
 @click.option("--target-language", default=DEFAULT_TARGET_LANGUAGE)
 @click.option("--batch-size", default=DEFAULT_BATCH_SIZE, type=int)
 @click.option("--model")
+@click.option("--review-model")
 @click.option(
     "--provider",
     "provider_name",
     type=click.Choice(["openai", "gemini"], case_sensitive=False),
     default="openai",
     show_default=True,
+)
+@click.option(
+    "--review-provider",
+    "review_provider_name",
+    type=click.Choice(["openai", "gemini"], case_sensitive=False),
 )
 @click.option(
     "--glossary",
@@ -137,7 +155,9 @@ def app(
     target_language: str,
     batch_size: int,
     model: str | None,
+    review_model: str | None,
     provider_name: str,
+    review_provider_name: str | None,
     glossary: Path | None,
     context_size: int,
     consistency_report: Path | None,
@@ -152,12 +172,18 @@ def app(
 @click.option("--target-language", default=DEFAULT_TARGET_LANGUAGE)
 @click.option("--batch-size", default=DEFAULT_BATCH_SIZE, type=int)
 @click.option("--model")
+@click.option("--review-model")
 @click.option(
     "--provider",
     "provider_name",
     type=click.Choice(["openai", "gemini"], case_sensitive=False),
     default="openai",
     show_default=True,
+)
+@click.option(
+    "--review-provider",
+    "review_provider_name",
+    type=click.Choice(["openai", "gemini"], case_sensitive=False),
 )
 @click.option(
     "--glossary",
@@ -172,7 +198,9 @@ def translate_command(
     target_language: str,
     batch_size: int,
     model: str | None,
+    review_model: str | None,
     provider_name: str,
+    review_provider_name: str | None,
     glossary: Path | None,
     context_size: int,
     consistency_report: Path | None,
@@ -186,7 +214,9 @@ def translate_command(
         target_language=target_language,
         batch_size=batch_size,
         model=model,
+        review_model=review_model,
         provider_name=provider_name,
+        review_provider_name=review_provider_name,
         glossary_path=glossary,
         context_size=context_size,
         consistency_report=consistency_report,
@@ -198,8 +228,16 @@ def translate_command(
 @click.argument("translated_srt", type=click.Path(path_type=Path, exists=False))
 @click.option("--source-language", default=DEFAULT_SOURCE_LANGUAGE)
 @click.option("--target-language", default=DEFAULT_TARGET_LANGUAGE)
+@click.option(
+    "--provider",
+    "provider_name",
+    type=click.Choice(["openai", "gemini"], case_sensitive=False),
+    default="openai",
+    show_default=True,
+)
 @click.option("--consistency-report", required=True, type=click.Path(path_type=Path, exists=False))
-@click.option("--model")
+@click.option("--model", "review_model")
+@click.option("--review-model", "review_model")
 @click.option(
     "--glossary",
     type=click.Path(path_type=Path, exists=True, readable=True, file_okay=True, dir_okay=False),
@@ -209,11 +247,14 @@ def review_command(
     translated_srt: Path,
     source_language: str,
     target_language: str,
+    provider_name: str,
     consistency_report: Path,
-    model: str | None,
+    review_model: str | None,
     glossary: Path | None,
 ) -> None:
     """Review existing subtitle files for consistency issues."""
+
+    normalized_provider = normalize_review_provider_name(provider_name)
 
     try:
         if not source_srt.exists():
@@ -227,14 +268,20 @@ def review_command(
             if glossary is not None
             else None
         )
-        resolved_model = model or config.openai_model
-        reviewer = OpenAIConsistencyReviewer(model=resolved_model)
+        resolved_model = resolve_review_model(
+            normalized_provider,
+            model=review_model,
+            config=config,
+        )
 
         finding_count = review_srt_files(
             source_path=source_srt,
             translated_path=translated_srt,
             report_path=consistency_report,
-            reviewer=reviewer,
+            reviewer=lambda: _create_consistency_reviewer(
+                normalized_provider,
+                resolved_model,
+            ),
             source_language=source_language,
             target_language=target_language,
             glossary=glossary_value,
@@ -244,9 +291,15 @@ def review_command(
     except FileExistsError as exc:
         _fail(_error_message(exc))
     except ConsistencyReviewerError:
-        _fail("Consistency review provider failed.")
-    except ConsistencyReportGenerationError:
-        _fail("Consistency review failed.")
+        _fail(
+            "Consistency review provider failed "
+            f"({normalized_provider}). Existing translated SRT was not changed."
+        )
+    except ConsistencyReportGenerationError as exc:
+        _fail(
+            f"{_error_message(exc)} ({normalized_provider}). "
+            "Existing translated SRT was not changed."
+        )
     except SubtitlePairValidationError as exc:
         _fail(f"Incompatible subtitle files: {_error_message(exc)}")
     except (srt.SRTParseError, srt.TimestampParseError) as exc:
@@ -256,6 +309,7 @@ def review_command(
 
     click.echo(
         "Consistency review complete. "
+        f"Provider: {normalized_provider} Model: {resolved_model}. "
         f"No translation was performed. Source: {source_srt} "
         f"Translated: {translated_srt} Report: {consistency_report} "
         f"Findings: {finding_count}."
@@ -304,10 +358,20 @@ def _parse_legacy_args(args: tuple[str, ...]) -> dict[str, object]:
                 raise click.UsageError("Option '--model' requires a value.")
             parsed["model"] = args[index + 1]
             index += 2
+        elif token == "--review-model":
+            if index + 1 >= len(args):
+                raise click.UsageError("Option '--review-model' requires a value.")
+            parsed["review_model"] = args[index + 1]
+            index += 2
         elif token == "--provider":
             if index + 1 >= len(args):
                 raise click.UsageError("Option '--provider' requires a value.")
             parsed["provider_name"] = args[index + 1]
+            index += 2
+        elif token == "--review-provider":
+            if index + 1 >= len(args):
+                raise click.UsageError("Option '--review-provider' requires a value.")
+            parsed["review_provider_name"] = args[index + 1]
             index += 2
         elif token == "--glossary":
             if index + 1 >= len(args):
@@ -350,7 +414,9 @@ def _run_translate_command(
     target_language: str,
     batch_size: int,
     model: str | None,
+    review_model: str | None,
     provider_name: str = "openai",
+    review_provider_name: str | None,
     glossary_path: Path | None,
     context_size: int,
     consistency_report: Path | None,
@@ -364,8 +430,6 @@ def _run_translate_command(
         _fail("batch-size must be greater than zero.")
     if context_size < 0:
         _fail("context-size must not be negative.")
-    if normalized_provider == "gemini" and consistency_report is not None:
-        _fail("Gemini translation does not support --consistency-report yet.")
 
     if not input_path.exists():
         _fail(f"Input file does not exist: {input_path}")
@@ -388,22 +452,43 @@ def _run_translate_command(
                 _fail(f"Consistency report already exists: {consistency_report}")
 
         config = load_config()
+        resolved_translation_model = resolve_translation_model(
+            normalized_provider,
+            model=model,
+            config=config,
+        )
         glossary = (
             load_glossary(glossary_path, source_language, target_language)
             if glossary_path is not None
             else None
         )
         provider = (
-            OpenAIProvider(model=model or config.openai_model)
+            OpenAIProvider(model=resolved_translation_model)
             if normalized_provider == "openai"
-            else GeminiProvider(model=model or config.gemini_model)
+            else GeminiProvider(model=resolved_translation_model)
         )
-        reviewer = (
-            OpenAIConsistencyReviewer(model=model or config.openai_model)
-            if consistency_report is not None
-            else None
-        )
-        translate_srt_file(
+        resolved_review_provider: str | None = None
+        resolved_review_model: str | None = None
+        reviewer = None
+        if consistency_report is not None:
+            resolved_review_provider = normalize_review_provider_name(
+                review_provider_name or normalized_provider
+            )
+            resolved_review_model = resolve_review_model(
+                resolved_review_provider,
+                model=review_model,
+                config=config,
+            )
+
+            def reviewer_factory() -> object:
+                return _create_consistency_reviewer(
+                    resolved_review_provider,
+                    resolved_review_model,
+                )
+
+            reviewer = reviewer_factory
+
+        finding_count = translate_srt_file(
             input_path=input_path,
             output_path=output_path,
             provider=provider,
@@ -423,8 +508,17 @@ def _run_translate_command(
         _fail("Translation provider failed.")
     except ConsistencyReviewerError:
         _fail("Consistency review provider failed.")
-    except ConsistencyReportGenerationError:
-        _fail("Translation succeeded, but consistency review failed.")
+    except ConsistencyReportGenerationError as exc:
+        review_label = normalize_review_provider_name(review_provider_name or normalized_provider)
+        if "writing" in _error_message(exc).casefold():
+            _fail(
+                "Translation succeeded, but consistency report writing failed "
+                f"({review_label}). Translated SRT was preserved."
+            )
+        _fail(
+            "Translation succeeded, but consistency review failed "
+            f"({review_label}). Translated SRT was preserved."
+        )
     except (BatchProtocolError, SubtitleTranslationError) as exc:
         _fail(f"Invalid translation response: {_error_message(exc)}")
     except (srt.SRTParseError, srt.TimestampParseError) as exc:
@@ -434,9 +528,26 @@ def _run_translate_command(
     except TranslationInputError as exc:
         _fail(f"Invalid input: {_error_message(exc)}")
 
-    click.echo(f"Translation complete: {output_path}")
+    click.echo(
+        "Translation complete. "
+        f"Provider: {normalized_provider} Model: {resolved_translation_model}. "
+        f"Output: {output_path}"
+    )
     if consistency_report is not None:
-        click.echo(f"Consistency report complete: {consistency_report}")
+        click.echo(
+            "Consistency review complete. "
+            f"Provider: {resolved_review_provider} Model: {resolved_review_model}. "
+            f"Report: {consistency_report} Findings: {finding_count}."
+        )
+
+
+def _create_consistency_reviewer(provider_name: str, model: str) -> object:
+    try:
+        if provider_name == "openai":
+            return OpenAIConsistencyReviewer(model=model)
+        return GeminiConsistencyReviewer(model=model)
+    except TranslationProviderConfigurationError as exc:
+        raise ConsistencyReviewerError(_error_message(exc)) from exc
 
 
 def _fail(message: str) -> NoReturn:
