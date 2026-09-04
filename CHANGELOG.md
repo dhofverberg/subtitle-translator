@@ -66,7 +66,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Documentation** – README, CONTRIBUTING, SECURITY, CHANGELOG, architecture
   overview, usage guide, release checklist, and sample files.
 
-### Changed
+### Changed (continued)
 
 - Improved help text and error messages to align with user-visible CLI behavior.
 - Tightened provider-neutral import isolation: provider SDKs are not imported
