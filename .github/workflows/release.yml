@@ -1,0 +1,235 @@
+name: Release
+
+# Trigger: publish a GitHub release to deploy to PyPI.
+# Publishing is only triggered for "published" release events, which prevents
+# accidental uploads from drafts or pre-releases.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Build ───────────────────────────────────────────────────────────────────
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+        with:
+          python-version: "3.13"
+
+      - name: Install build and verification tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine packaging
+
+      # ── Run the full CI suite before building ────────────────────────────
+      - name: Install project (all extras + dev)
+        run: python -m pip install -e ".[all,dev]"
+
+      - name: Run Ruff
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build wheel and source distribution
+        run: python -m build
+
+      # ── Validate metadata ─────────────────────────────────────────────────
+      - name: Validate distribution metadata
+        run: python -m twine check dist/*
+
+      # ── Check expected filenames ──────────────────────────────────────────
+      - name: Verify expected distribution filenames
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          wheels = list(Path("dist").glob("subtitle_translator-*.whl"))
+          sdists = list(Path("dist").glob("subtitle_translator-*.tar.gz"))
+          assert len(wheels) == 1, f"Expected exactly one wheel, found: {wheels}"
+          assert len(sdists) == 1, f"Expected exactly one sdist, found: {sdists}"
+          print(f"Wheel:  {wheels[0].name}")
+          print(f"Sdist:  {sdists[0].name}")
+          PY
+
+      # ── Verify distribution contents ──────────────────────────────────────
+      - name: Verify distribution contents
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          sdist = next(Path("dist").glob("*.tar.gz"))
+
+          with zipfile.ZipFile(wheel) as archive:
+              wheel_files = set(archive.namelist())
+
+          with tarfile.open(sdist, "r:gz") as archive:
+              sdist_files = set(archive.getnames())
+
+          required_package_files = (
+              "subtitle_translator/resources/prompt.txt",
+              "subtitle_translator/resources/batch_prompt.txt",
+              "subtitle_translator/resources/consistency_prompt.txt",
+          )
+
+          for required in required_package_files:
+              assert required in wheel_files, f"{required} missing from wheel"
+              assert any(
+                  name.endswith(f"/src/{required}") for name in sdist_files
+              ), f"{required} missing from source distribution"
+
+          assert any(
+              name.endswith(".dist-info/licenses/LICENSE") for name in wheel_files
+          ), "LICENSE missing from wheel"
+          assert any(
+              name.count("/") == 1 and name.endswith("/LICENSE")
+              for name in sdist_files
+          ), "LICENSE missing from source distribution"
+
+          required_docs = ("README.md", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md")
+          for doc in required_docs:
+              assert any(
+                  name.count("/") == 1 and name.endswith(f"/{doc}")
+                  for name in sdist_files
+              ), f"{doc} missing from source distribution"
+          PY
+
+      # ── Version/tag validation ─────────────────────────────────────────────
+      - name: Validate package version matches release tag
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          try:
+              from packaging.version import Version
+          except ImportError:
+              print("packaging library not available", file=sys.stderr)
+              sys.exit(1)
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not tag.startswith("v"):
+              print(f"ERROR: tag '{tag}' does not start with 'v'", file=sys.stderr)
+              sys.exit(1)
+
+          tag_version_str = tag[1:]  # strip leading 'v'
+          try:
+              tag_version = Version(tag_version_str)
+          except Exception as e:
+              print(f"ERROR: tag version '{tag_version_str}' is not a valid PEP 440 version: {e}", file=sys.stderr)
+              sys.exit(1)
+
+          # Read version from the installed package metadata
+          from importlib.metadata import version as pkg_version
+          package_version_str = pkg_version("subtitle-translator")
+          package_version = Version(package_version_str)
+
+          if tag_version != package_version:
+              print(
+                  f"ERROR: tag version '{tag_version}' does not match "
+                  f"package version '{package_version}'",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          print(f"Version OK: tag={tag_version}, package={package_version}")
+          PY
+
+      # ── Installed-wheel verification ──────────────────────────────────────
+      - name: Verify installed wheel outside source tree
+        run: |
+          verification_env="$RUNNER_TEMP/subtitle-translator-release-verify"
+          python -m venv "$verification_env"
+          wheel_path="$(realpath dist/*.whl)"
+          "$verification_env/bin/python" -m pip install "subtitle-translator[all] @ file://$wheel_path"
+
+          cd "$RUNNER_TEMP"
+          PYTHONPATH= "$verification_env/bin/python" - <<'PY'
+          import sys
+          import os
+          from importlib.metadata import version
+          from importlib.resources import files
+          from pathlib import Path
+
+          import subtitle_translator
+
+          package_path = Path(subtitle_translator.__file__).resolve()
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          assert not package_path.is_relative_to(workspace), package_path
+
+          resources = files("subtitle_translator").joinpath("resources")
+          assert resources.joinpath("prompt.txt").read_text(encoding="utf-8")
+          assert resources.joinpath("batch_prompt.txt").read_text(encoding="utf-8")
+          assert resources.joinpath("consistency_prompt.txt").read_text(encoding="utf-8")
+          assert version("subtitle-translator") == subtitle_translator.__version__
+
+          # Provider SDKs must not be imported for basic package import
+          assert "openai" not in sys.modules
+          assert "google.genai" not in sys.modules
+          PY
+
+          # CLI smoke checks
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" --version
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" translate --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" translate --provider gemini --review-provider openai --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" review --help
+          PYTHONPATH= "$verification_env/bin/subtitle-translator" review --provider gemini --help
+
+      # ── Upload artifacts ───────────────────────────────────────────────────
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
+        with:
+          name: subtitle-translator-dist-${{ github.ref_name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  # ── Publish ─────────────────────────────────────────────────────────────────
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/subtitle-translator/
+    permissions:
+      id-token: write  # required for OIDC Trusted Publishing
+
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444306234ee4a4d61c5e3eb5  # v4.1.8
+        with:
+          name: subtitle-translator-dist-${{ github.ref_name }}
+          path: dist/
+
+      - name: Verify expected files before publish
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          wheels = list(Path("dist").glob("subtitle_translator-*.whl"))
+          sdists = list(Path("dist").glob("subtitle_translator-*.tar.gz"))
+          assert len(wheels) == 1, f"Expected exactly one wheel, found: {wheels}"
+          assert len(sdists) == 1, f"Expected exactly one sdist, found: {sdists}"
+          print(f"Publishing: {wheels[0].name} and {sdists[0].name}")
+          PY
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@76f52bc884231f62b9a034ebfe128415bbaabdfc  # release/v1
+        with:
+          attestations: true

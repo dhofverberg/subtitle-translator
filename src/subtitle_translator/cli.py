@@ -1,4 +1,5 @@
 import sys
+from importlib.metadata import version as _metadata_version
 from pathlib import Path
 from typing import NoReturn
 
@@ -73,6 +74,16 @@ class LegacyCompatibleGroup(click.Group):
         if args is None:
             args = sys.argv[1:]
         args = list(args)
+
+        # Handle --version / -V before any other processing.
+        # Done here because ignore_unknown_options on the group context
+        # prevents Click from processing eager options normally.
+        if args and args[0] in ("--version", "-V"):
+            version = _metadata_version("subtitle-translator")
+            click.echo(f"subtitle-translator, version {version}")
+            if standalone_mode:
+                sys.exit(0)
+            return 0
 
         # If first arg is a command or an option, use normal Click parsing
         if args and (args[0] in self.commands or args[0].startswith("-")):

@@ -1,0 +1,57 @@
+name: Feature request
+description: Propose a new feature or improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for your suggestion. Please describe the problem you are
+        trying to solve and the behavior you would like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: >
+        What problem are you trying to solve? What workflow is blocked or
+        inconvenient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed behavior
+      description: >
+        Describe the feature or change you would like. Include CLI flag names,
+        expected inputs and outputs, or example commands if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >
+        Have you considered any workarounds or alternative approaches?
+
+  - type: textarea
+    id: provider_neutral
+    attributes:
+      label: Provider-neutral implications
+      description: >
+        Does this feature affect only one provider, or should it apply equally
+        to all providers? Are there provider-specific constraints?
+
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy or compatibility considerations
+      description: >
+        Does this feature involve sending new data to an external API? Does it
+        change existing behavior that users may rely on?
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

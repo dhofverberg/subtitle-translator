@@ -1,7 +1,7 @@
 # Subtitle Translation Consistency Report
 
-- Source file: `C:\src\subtitle-translator.worktrees\agents-consistency-review-standalone-cli\.pytest-tmp\test_review_srt_files_does_not0\source.srt`
-- Translated file: `C:\src\subtitle-translator.worktrees\agents-consistency-review-standalone-cli\.pytest-tmp\test_review_srt_files_does_not0\translated.srt`
+- Source file: `C:\src\subtitle-translator.worktrees\release-readiness-prep-for-v100\.pytest-tmp\test_review_srt_files_does_not0\source.srt`
+- Translated file: `C:\src\subtitle-translator.worktrees\release-readiness-prep-for-v100\.pytest-tmp\test_review_srt_files_does_not0\translated.srt`
 - Source language: English
 - Target language: Swedish
 - Glossary used: no
