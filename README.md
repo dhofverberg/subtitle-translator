@@ -27,8 +27,8 @@ AI-powered subtitle translation for SRT files, supporting OpenAI and Google Gemi
 
 - Python 3.11, 3.12, or 3.13
 - At least one provider SDK installed (see [Installation](#installation)):
-  - OpenAI: `pip install "subtranslate-ai[openai]"`
-  - Gemini: `pip install "subtranslate-ai[gemini]"`
+  - OpenAI: `pip install "subtitle-translator[openai]"`
+  - Gemini: `pip install "subtitle-translator[gemini]"`
 - A valid API key for each provider you use
 
 ---
@@ -36,11 +36,6 @@ AI-powered subtitle translation for SRT files, supporting OpenAI and Google Gemi
 ## Installation
 
 This project is not yet published on PyPI. Install from a local checkout.
-
-> **Naming note:** the future PyPI distribution name is `subtranslate-ai`. The
-> Python import package is `subtitle_translator`, and the CLI command is
-> `subtitle-translator`. These three names are intentionally different — see
-> [docs/releasing.md](docs/releasing.md) for details.
 
 **Clone and create a virtual environment:**
 
@@ -82,9 +77,9 @@ pip install -e ".[all,dev]"
 
 ```bash
 # These commands will work once the package is published to PyPI:
-# pip install "subtranslate-ai[openai]"
-# pip install "subtranslate-ai[gemini]"
-# pip install "subtranslate-ai[all]"
+# pip install "subtitle-translator[openai]"
+# pip install "subtitle-translator[gemini]"
+# pip install "subtitle-translator[all]"
 ```
 
 ---
@@ -494,15 +489,15 @@ If the files do not match, the command fails before making any API calls.
 Ensure the virtual environment is activated and the package is installed:
 
 ```bash
-pip show subtranslate-ai
+pip show subtitle-translator
 subtitle-translator --help
 ```
 
 ### Missing provider SDK
 
 ```
-Error: OpenAI support is not installed. Install subtranslate-ai[openai].
-Error: Gemini support is not installed. Install subtranslate-ai[gemini].
+Error: OpenAI support is not installed. Install subtitle-translator[openai].
+Error: Gemini support is not installed. Install subtitle-translator[gemini].
 ```
 
 Install the required extra:

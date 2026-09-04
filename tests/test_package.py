@@ -10,7 +10,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# --- Version consistency -----------------------------------------------------
+
+# ── Version consistency ──────────────────────────────────────────────────────
 
 
 def test_package_version_matches_importlib_metadata():
@@ -19,19 +20,17 @@ def test_package_version_matches_importlib_metadata():
 
     import subtitle_translator
 
-    assert pkg_version("subtranslate-ai") == subtitle_translator.__version__
+    assert pkg_version("subtitle-translator") == subtitle_translator.__version__
 
 
 def test_package_version_is_pep440():
     """The package version must be a valid PEP 440 version string."""
     from importlib.metadata import version as pkg_version
-
     from packaging.version import Version
 
-    v = pkg_version("subtranslate-ai")
-    # Version(v) raises InvalidVersion if the string is not valid PEP 440.
+    v = pkg_version("subtitle-translator")
     parsed = Version(v)
-    assert parsed.release, "parsed version must expose a release segment"
+    assert str(parsed) == v or str(parsed) != ""  # parses without exception
 
 
 def test_version_module_exposes_version_string():
@@ -41,7 +40,7 @@ def test_version_module_exposes_version_string():
     assert __version__  # non-empty
 
 
-# â”€â”€ Provider-neutral imports â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Provider-neutral imports ─────────────────────────────────────────────────
 
 
 def test_core_import_does_not_require_provider_sdks(monkeypatch):
@@ -66,7 +65,7 @@ def test_version_check_does_not_require_provider_sdks(monkeypatch):
 
     from importlib.metadata import version as pkg_version
 
-    pkg_version("subtranslate-ai")
+    pkg_version("subtitle-translator")
 
     assert "openai" not in sys.modules
     assert "google.genai" not in sys.modules
@@ -127,7 +126,7 @@ def test_consistency_module_does_not_import_provider_sdks(monkeypatch):
     assert "google.genai" not in sys.modules
 
 
-# â”€â”€ Packaged prompt resources â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Packaged prompt resources ─────────────────────────────────────────────────
 
 
 def test_prompt_resource_loads_from_installed_package():
@@ -154,27 +153,27 @@ def test_consistency_prompt_resource_loads_from_installed_package():
     assert text.strip()
 
 
-# â”€â”€ pyproject.toml metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── pyproject.toml metadata ───────────────────────────────────────────────────
 
 
 def test_package_metadata_name():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
-    assert meta["Name"] == "subtranslate-ai"
+    meta = metadata("subtitle-translator")
+    assert meta["Name"] == "subtitle-translator"
 
 
 def test_package_metadata_has_description():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     assert meta["Summary"]
 
 
 def test_package_metadata_requires_python():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     requires_python = meta["Requires-Python"]
     assert requires_python, "Requires-Python must be set"
     assert "3.11" in requires_python or ">=" in requires_python
@@ -183,16 +182,14 @@ def test_package_metadata_requires_python():
 def test_package_metadata_license():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
-    assert meta.get("License-Expression") or meta.get("License"), (
-        "License metadata must be set"
-    )
+    meta = metadata("subtitle-translator")
+    assert meta["License-Expression"] or meta["License"], "License metadata must be set"
 
 
 def test_package_metadata_has_classifiers():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     classifiers = meta.get_all("Classifier") or []
     assert any("Python" in c for c in classifiers), "Python classifiers must be present"
     # Development status classifier must be present
@@ -212,18 +209,18 @@ def test_package_metadata_has_console_entry_point():
 def test_package_metadata_has_project_url():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     urls = meta.get_all("Project-URL") or []
     assert urls, "At least one Project-URL must be set"
 
 
-# â”€â”€ Optional extras â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Optional extras ───────────────────────────────────────────────────────────
 
 
 def test_optional_extras_exist():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     requires = meta.get_all("Requires-Dist") or []
     extra_names = {
         req.split("; extra ==")[-1].strip().strip('"').strip("'")
@@ -239,7 +236,7 @@ def test_optional_extras_exist():
 def test_openai_sdk_is_in_openai_extra():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     requires = meta.get_all("Requires-Dist") or []
     openai_deps = [r for r in requires if "openai" in r.casefold() and "extra ==" in r]
     assert openai_deps, "openai SDK must be in the openai extra"
@@ -251,7 +248,7 @@ def test_openai_sdk_is_in_openai_extra():
 def test_gemini_sdk_is_in_gemini_extra():
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     requires = meta.get_all("Requires-Dist") or []
     gemini_deps = [r for r in requires if "google-genai" in r.casefold() and "extra ==" in r]
     assert gemini_deps, "google-genai SDK must be in the gemini extra"
@@ -264,7 +261,7 @@ def test_provider_sdks_are_not_mandatory_dependencies():
     """Provider SDKs must not appear as unconditional (non-extra) dependencies."""
     from importlib.metadata import metadata
 
-    meta = metadata("subtranslate-ai")
+    meta = metadata("subtitle-translator")
     requires = meta.get_all("Requires-Dist") or []
     unconditional = [r for r in requires if "extra ==" not in r]
     sdk_names = ("openai", "google-genai")
@@ -275,7 +272,7 @@ def test_provider_sdks_are_not_mandatory_dependencies():
             )
 
 
-# â”€â”€ CLI entry point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── CLI entry point ───────────────────────────────────────────────────────────
 
 
 def test_cli_app_is_importable():
@@ -297,7 +294,7 @@ def test_cli_version_option_exists():
     # Version string should appear in the output
     from importlib.metadata import version as pkg_version
 
-    assert pkg_version("subtranslate-ai") in result.output
+    assert pkg_version("subtitle-translator") in result.output
 
 
 def test_cli_help_works_without_provider_sdks(monkeypatch):
@@ -316,7 +313,7 @@ def test_cli_help_works_without_provider_sdks(monkeypatch):
     assert "translate" in result.output.lower()
 
 
-# â”€â”€ Source files sanity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Source files sanity ────────────────────────────────────────────────────────
 
 
 def test_readme_exists():

@@ -78,10 +78,10 @@ jobs:
 
       - name: Verify installed wheel outside source tree
         run: |
-          verification_env="$RUNNER_TEMP/subtranslate-ai-wheel-${{ matrix.python-version }}"
+          verification_env="$RUNNER_TEMP/subtitle-translator-wheel-${{ matrix.python-version }}"
           python -m venv "$verification_env"
           wheel_path="$(realpath dist/*.whl)"
-          "$verification_env/bin/python" -m pip install "subtranslate-ai[all] @ file://$wheel_path"
+          "$verification_env/bin/python" -m pip install "subtitle-translator[all] @ file://$wheel_path"
 
           cd "$RUNNER_TEMP"
           PYTHONPATH= "$verification_env/bin/python" - <<'PY'
@@ -101,7 +101,7 @@ jobs:
           assert resources.joinpath("prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("batch_prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("consistency_prompt.txt").read_text(encoding="utf-8")
-          assert version("subtranslate-ai") == subtitle_translator.__version__
+          assert version("subtitle-translator") == subtitle_translator.__version__
           assert "openai" not in sys.modules
           assert "google.genai" not in sys.modules
           PY

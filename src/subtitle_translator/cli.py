@@ -79,7 +79,7 @@ class LegacyCompatibleGroup(click.Group):
         # Done here because ignore_unknown_options on the group context
         # prevents Click from processing eager options normally.
         if args and args[0] in ("--version", "-V"):
-            version = _metadata_version("subtranslate-ai")
+            version = _metadata_version("subtitle-translator")
             click.echo(f"subtitle-translator, version {version}")
             if standalone_mode:
                 sys.exit(0)

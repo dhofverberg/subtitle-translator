@@ -15,12 +15,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-### Changed
-
-- **PyPI distribution name** – The package will be published to PyPI as
-  `subtranslate-ai`. The Python import package (`subtitle_translator`) and the
-  CLI command (`subtitle-translator`) are unchanged.
-
 ### Added
 
 - **Core translation engine** – SRT subtitle translation using LLM providers.
@@ -66,7 +60,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Documentation** – README, CONTRIBUTING, SECURITY, CHANGELOG, architecture
   overview, usage guide, release checklist, and sample files.
 
-### Changed (continued)
+### Changed
 
 - Improved help text and error messages to align with user-visible CLI behavior.
 - Tightened provider-neutral import isolation: provider SDKs are not imported

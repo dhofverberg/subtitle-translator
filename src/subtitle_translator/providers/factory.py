@@ -100,7 +100,7 @@ def create_translation_provider(
             if exc.name != "openai":
                 raise
             raise TranslationProviderConfigurationError(
-                "OpenAI support is not installed. Install subtranslate-ai[openai]."
+                "OpenAI support is not installed. Install subtitle-translator[openai]."
             ) from exc
 
         return OpenAIProvider(client=client, model=resolved_model)
@@ -116,7 +116,7 @@ def create_translation_provider(
         if exc.name not in {"google", "google.genai"}:
             raise
         raise TranslationProviderConfigurationError(
-            "Gemini support is not installed. Install subtranslate-ai[gemini]."
+            "Gemini support is not installed. Install subtitle-translator[gemini]."
         ) from exc
 
     return GeminiProvider(
@@ -166,7 +166,7 @@ def create_consistency_reviewer(
             if exc.name != "openai":
                 raise
             raise TranslationProviderConfigurationError(
-                "OpenAI support is not installed. Install subtranslate-ai[openai]."
+                "OpenAI support is not installed. Install subtitle-translator[openai]."
             ) from exc
 
         return OpenAIConsistencyReviewer(client=client, model=resolved_model)
@@ -182,7 +182,7 @@ def create_consistency_reviewer(
         if exc.name not in {"google", "google.genai"}:
             raise
         raise TranslationProviderConfigurationError(
-            "Gemini support is not installed. Install subtranslate-ai[gemini]."
+            "Gemini support is not installed. Install subtitle-translator[gemini]."
         ) from exc
 
     return GeminiConsistencyReviewer(

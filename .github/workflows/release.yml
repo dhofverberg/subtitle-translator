@@ -9,9 +9,9 @@ on:
 
 permissions:
   contents: read
-  actions: write
+
 jobs:
-  # --- Build ---------------------------------------------------------------
+  # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build distribution
     runs-on: ubuntu-latest
@@ -30,7 +30,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install build twine packaging
 
-      # â”€â”€ Run the full CI suite before building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Run the full CI suite before building ────────────────────────────
       - name: Install project (all extras + dev)
         run: python -m pip install -e ".[all,dev]"
 
@@ -40,28 +40,28 @@ jobs:
       - name: Run tests
         run: pytest
 
-      # â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Build ─────────────────────────────────────────────────────────────
       - name: Build wheel and source distribution
         run: python -m build
 
-      # â”€â”€ Validate metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Validate metadata ─────────────────────────────────────────────────
       - name: Validate distribution metadata
         run: python -m twine check dist/*
 
-      # â”€â”€ Check expected filenames â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Check expected filenames ──────────────────────────────────────────
       - name: Verify expected distribution filenames
         run: |
           python - <<'PY'
           from pathlib import Path
-          wheels = list(Path("dist").glob("subtranslate_ai-*.whl"))
-          sdists = list(Path("dist").glob("subtranslate_ai-*.tar.gz"))
+          wheels = list(Path("dist").glob("subtitle_translator-*.whl"))
+          sdists = list(Path("dist").glob("subtitle_translator-*.tar.gz"))
           assert len(wheels) == 1, f"Expected exactly one wheel, found: {wheels}"
           assert len(sdists) == 1, f"Expected exactly one sdist, found: {sdists}"
           print(f"Wheel:  {wheels[0].name}")
           print(f"Sdist:  {sdists[0].name}")
           PY
 
-      # â”€â”€ Verify distribution contents â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Verify distribution contents ──────────────────────────────────────
       - name: Verify distribution contents
         run: |
           python - <<'PY'
@@ -106,7 +106,7 @@ jobs:
               ), f"{doc} missing from source distribution"
           PY
 
-      # â”€â”€ Version/tag validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Version/tag validation ─────────────────────────────────────────────
       - name: Validate package version matches release tag
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
@@ -136,7 +136,7 @@ jobs:
 
           # Read version from the installed package metadata
           from importlib.metadata import version as pkg_version
-          package_version_str = pkg_version("subtranslate-ai")
+          package_version_str = pkg_version("subtitle-translator")
           package_version = Version(package_version_str)
 
           if tag_version != package_version:
@@ -150,13 +150,13 @@ jobs:
           print(f"Version OK: tag={tag_version}, package={package_version}")
           PY
 
-      # â”€â”€ Installed-wheel verification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Installed-wheel verification ──────────────────────────────────────
       - name: Verify installed wheel outside source tree
         run: |
-          verification_env="$RUNNER_TEMP/subtranslate-ai-release-verify"
+          verification_env="$RUNNER_TEMP/subtitle-translator-release-verify"
           python -m venv "$verification_env"
           wheel_path="$(realpath dist/*.whl)"
-          "$verification_env/bin/python" -m pip install "subtranslate-ai[all] @ file://$wheel_path"
+          "$verification_env/bin/python" -m pip install "subtitle-translator[all] @ file://$wheel_path"
 
           cd "$RUNNER_TEMP"
           PYTHONPATH= "$verification_env/bin/python" - <<'PY'
@@ -176,7 +176,7 @@ jobs:
           assert resources.joinpath("prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("batch_prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("consistency_prompt.txt").read_text(encoding="utf-8")
-          assert version("subtranslate-ai") == subtitle_translator.__version__
+          assert version("subtitle-translator") == subtitle_translator.__version__
 
           # Provider SDKs must not be imported for basic package import
           assert "openai" not in sys.modules
@@ -191,23 +191,23 @@ jobs:
           PYTHONPATH= "$verification_env/bin/subtitle-translator" review --help
           PYTHONPATH= "$verification_env/bin/subtitle-translator" review --provider gemini --help
 
-      # â”€â”€ Upload artifacts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      # ── Upload artifacts ───────────────────────────────────────────────────
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
         with:
-          name: subtranslate-ai-dist-${{ github.ref_name }}
+          name: subtitle-translator-dist-${{ github.ref_name }}
           path: dist/
           if-no-files-found: error
           retention-days: 7
 
-  # â”€â”€ Publish â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  # ── Publish ─────────────────────────────────────────────────────────────────
   publish:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/subtranslate-ai/
+      url: https://pypi.org/project/subtitle-translator/
     permissions:
       id-token: write  # required for OIDC Trusted Publishing
 
@@ -215,15 +215,15 @@ jobs:
       - name: Download distribution artifacts
         uses: actions/download-artifact@fa0a91b85d4f404e444306234ee4a4d61c5e3eb5  # v4.1.8
         with:
-          name: subtranslate-ai-dist-${{ github.ref_name }}
+          name: subtitle-translator-dist-${{ github.ref_name }}
           path: dist/
 
       - name: Verify expected files before publish
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          wheels = list(Path("dist").glob("subtranslate_ai-*.whl"))
-          sdists = list(Path("dist").glob("subtranslate_ai-*.tar.gz"))
+          wheels = list(Path("dist").glob("subtitle_translator-*.whl"))
+          sdists = list(Path("dist").glob("subtitle_translator-*.tar.gz"))
           assert len(wheels) == 1, f"Expected exactly one wheel, found: {wheels}"
           assert len(sdists) == 1, f"Expected exactly one sdist, found: {sdists}"
           print(f"Publishing: {wheels[0].name} and {sdists[0].name}")

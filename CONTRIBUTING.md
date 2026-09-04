@@ -82,7 +82,7 @@ tree and run the CLI:
 
 ```bash
 python -m venv /tmp/st-verify
-/tmp/st-verify/bin/pip install dist/subtranslate_ai-*.whl[all]
+/tmp/st-verify/bin/pip install "dist/subtitle_translator-*.whl[all]"
 /tmp/st-verify/bin/subtitle-translator --version
 /tmp/st-verify/bin/subtitle-translator --help
 /tmp/st-verify/bin/subtitle-translator translate --help
