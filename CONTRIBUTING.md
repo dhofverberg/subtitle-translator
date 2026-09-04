@@ -103,7 +103,6 @@ $wheelUri = python -c "from pathlib import Path; import sys; print(Path(sys.argv
 & "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" translate --help
 & "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" review --help
 ```
-
 ## Architecture overview
 
 See [`docs/architecture.md`](docs/architecture.md) for a concise description of

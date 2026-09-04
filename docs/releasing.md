@@ -108,7 +108,7 @@ all preparation steps are manual.
    & "$env:TEMP\st-release-verify\Scripts\subtitle-translator.exe" review --help
    ```
 
-9. **Run network-free integration tests** (automated — confirm they still pass):
+   9. **Run network-free integration tests** (automated — confirm they still pass):
 
    ```bash
    pytest
@@ -179,7 +179,6 @@ all preparation steps are manual.
 7. **Install the published version into a clean environment:**
 
    ```bash
-   # macOS / Linux
    python -m venv /tmp/st-published
    /tmp/st-published/bin/pip install "subtitle-translator[all]==X.Y.Z"
    /tmp/st-published/bin/subtitle-translator --version
@@ -192,7 +191,7 @@ all preparation steps are manual.
    & "$env:TEMP\st-published\Scripts\subtitle-translator.exe" --version
    ```
 
-8. **Verify uploaded artifact hashes** against the local build artifacts if
+   8. **Verify uploaded artifact hashes** against the local build artifacts if
    desired.
 
 ---
