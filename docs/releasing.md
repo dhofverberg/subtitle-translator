@@ -103,7 +103,7 @@ This project intentionally uses three different names. Do not confuse them:
 
    ```bash
    python -m venv /tmp/st-release-verify
-   /tmp/st-release-verify/bin/pip install "dist/subtranslate_ai-X.Y.Z-*.whl[all]"
+   /tmp/st-release-verify/bin/pip install dist/subtranslate_ai-X.Y.Z-*.whl[all]
    cd /tmp
    /tmp/st-release-verify/bin/subtitle-translator --version
    /tmp/st-release-verify/bin/subtitle-translator --help
