@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 
-# â”€â”€ Version consistency â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# --- Version consistency -----------------------------------------------------
 
 
 def test_package_version_matches_importlib_metadata():
