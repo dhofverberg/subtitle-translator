@@ -10,7 +10,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-
 # --- Version consistency -----------------------------------------------------
 
 
@@ -26,6 +25,7 @@ def test_package_version_matches_importlib_metadata():
 def test_package_version_is_pep440():
     """The package version must be a valid PEP 440 version string."""
     from importlib.metadata import version as pkg_version
+
     from packaging.version import Version
 
     v = pkg_version("subtranslate-ai")
