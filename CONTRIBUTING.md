@@ -81,12 +81,27 @@ Build the wheel, then install it into a clean environment outside the source
 tree and run the CLI:
 
 ```bash
+# macOS / Linux
 python -m venv /tmp/st-verify
-/tmp/st-verify/bin/pip install "dist/subtitle_translator-*.whl[all]"
+wheel_path="$(python -c 'from pathlib import Path; print(next(Path(\"dist\").glob(\"subtitle_translator-*.whl\")).resolve())')"
+wheel_uri="$(python -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).as_uri())' "$wheel_path")"
+/tmp/st-verify/bin/pip install "subtitle-translator[all] @ $wheel_uri"
 /tmp/st-verify/bin/subtitle-translator --version
 /tmp/st-verify/bin/subtitle-translator --help
 /tmp/st-verify/bin/subtitle-translator translate --help
 /tmp/st-verify/bin/subtitle-translator review --help
+```
+
+```powershell
+# Windows PowerShell
+python -m venv "$env:TEMP\st-verify"
+$wheelPath = (Get-ChildItem dist\subtitle_translator-*.whl | Select-Object -First 1).FullName
+$wheelUri = python -c "from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_uri())" "$wheelPath"
+& "$env:TEMP\st-verify\Scripts\pip.exe" install "subtitle-translator[all] @ $wheelUri"
+& "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" --version
+& "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" --help
+& "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" translate --help
+& "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" review --help
 ```
 
 ## Architecture overview

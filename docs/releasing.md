@@ -19,15 +19,21 @@ all preparation steps are manual.
 2. **Choose a semantic version** following [semver.org](https://semver.org/).
    For the first stable release use `1.0.0`.
 
-3. **Update the version source.**
+3. **Update the version.**
 
-   Edit `src/subtitle_translator/version.py`:
-   ```python
-   __version__ = "X.Y.Z"
-   ```
+   This project does not use dynamic versioning, so update both files:
 
-   This is the single authoritative version source. The installed package
-   metadata and `subtitle-translator --version` both derive from it.
+   - `pyproject.toml`:
+     ```toml
+     version = "X.Y.Z"
+     ```
+   - `src/subtitle_translator/version.py`:
+     ```python
+     __version__ = "X.Y.Z"
+     ```
+
+   Keep these values in sync: `pyproject.toml` controls installed package
+   metadata, and `__version__` is what the CLI `--version` output exposes.
 
 4. **Move CHANGELOG entries from `[Unreleased]`** into a new section:
 
@@ -77,13 +83,29 @@ all preparation steps are manual.
    move to a directory outside the repository, and verify:
 
    ```bash
+   # macOS / Linux
    python -m venv /tmp/st-release-verify
-   /tmp/st-release-verify/bin/pip install "dist/subtitle_translator-X.Y.Z-*.whl[all]"
+   wheel_path="$(python -c 'from pathlib import Path; print(next(Path(\"dist\").glob(\"subtitle_translator-X.Y.Z-*.whl\")).resolve())')"
+   wheel_uri="$(python -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).as_uri())' "$wheel_path")"
+   /tmp/st-release-verify/bin/pip install "subtitle-translator[all] @ $wheel_uri"
    cd /tmp
    /tmp/st-release-verify/bin/subtitle-translator --version
    /tmp/st-release-verify/bin/subtitle-translator --help
    /tmp/st-release-verify/bin/subtitle-translator translate --help
    /tmp/st-release-verify/bin/subtitle-translator review --help
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   python -m venv "$env:TEMP\st-release-verify"
+   $wheelPath = (Get-ChildItem dist\subtitle_translator-X.Y.Z-*.whl | Select-Object -First 1).FullName
+   $wheelUri = python -c "from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_uri())" "$wheelPath"
+   & "$env:TEMP\st-release-verify\Scripts\pip.exe" install "subtitle-translator[all] @ $wheelUri"
+   cd $env:TEMP
+   & "$env:TEMP\st-release-verify\Scripts\subtitle-translator.exe" --version
+   & "$env:TEMP\st-release-verify\Scripts\subtitle-translator.exe" --help
+   & "$env:TEMP\st-release-verify\Scripts\subtitle-translator.exe" translate --help
+   & "$env:TEMP\st-release-verify\Scripts\subtitle-translator.exe" review --help
    ```
 
 9. **Run network-free integration tests** (automated — confirm they still pass):
@@ -157,9 +179,17 @@ all preparation steps are manual.
 7. **Install the published version into a clean environment:**
 
    ```bash
+   # macOS / Linux
    python -m venv /tmp/st-published
    /tmp/st-published/bin/pip install "subtitle-translator[all]==X.Y.Z"
    /tmp/st-published/bin/subtitle-translator --version
+   ```
+
+   ```powershell
+   # Windows PowerShell
+   python -m venv "$env:TEMP\st-published"
+   & "$env:TEMP\st-published\Scripts\pip.exe" install "subtitle-translator[all]==X.Y.Z"
+   & "$env:TEMP\st-published\Scripts\subtitle-translator.exe" --version
    ```
 
 8. **Verify uploaded artifact hashes** against the local build artifacts if

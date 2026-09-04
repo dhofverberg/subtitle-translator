@@ -30,7 +30,7 @@ def test_package_version_is_pep440():
 
     v = pkg_version("subtitle-translator")
     parsed = Version(v)
-    assert str(parsed) == v or str(parsed) != ""  # parses without exception
+    assert parsed.release, "parsed version must expose a release segment"
 
 
 def test_version_module_exposes_version_string():
@@ -183,7 +183,7 @@ def test_package_metadata_license():
     from importlib.metadata import metadata
 
     meta = metadata("subtitle-translator")
-    assert meta["License-Expression"] or meta["License"], "License metadata must be set"
+    assert meta.get("License-Expression") or meta.get("License"), "License metadata must be set"
 
 
 def test_package_metadata_has_classifiers():
