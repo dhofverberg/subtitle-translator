@@ -7,6 +7,18 @@ all preparation steps are manual.
 
 ---
 
+## Naming
+
+This project intentionally uses three different names. Do not confuse them:
+
+| Name                 | Value                | Where it appears                                  |
+|-----------------------|-----------------------|---------------------------------------------------|
+| PyPI distribution name | `subtranslate-ai`    | `pip install`, PyPI project page, `pyproject.toml` `project.name` |
+| Python import package  | `subtitle_translator` | `import subtitle_translator`, `src/subtitle_translator/` |
+| CLI command             | `subtitle-translator` | Terminal invocation, `[project.scripts]` entry point |
+
+---
+
 ## Pre-release
 
 1. **Confirm a clean working tree.**
@@ -19,15 +31,28 @@ all preparation steps are manual.
 2. **Choose a semantic version** following [semver.org](https://semver.org/).
    For the first stable release use `1.0.0`.
 
-3. **Update the version source.**
+3. **Update the version.**
 
-   Edit `src/subtitle_translator/version.py`:
-   ```python
-   __version__ = "X.Y.Z"
-   ```
+   This project does not use dynamic versioning, so the version must be
+   updated in **two places** and kept in sync:
 
-   This is the single authoritative version source. The installed package
-   metadata and `subtitle-translator --version` both derive from it.
+   - `pyproject.toml`:
+     ```toml
+     version = "X.Y.Z"
+     ```
+   - `src/subtitle_translator/version.py`:
+     ```python
+     __version__ = "X.Y.Z"
+     ```
+
+   `pyproject.toml`'s `version` is what `importlib.metadata.version(...)`
+   reports for the installed distribution. `subtitle_translator.version.__version__`
+   is what the CLI's `--version` flag reads at runtime (via installed package
+   metadata) and what `subtitle_translator.__version__` exposes for
+   programmatic use. The automated test
+   `test_package_version_matches_importlib_metadata` in
+   `tests/test_package.py` fails if these two values ever diverge, so run the
+   test suite after bumping both.
 
 4. **Move CHANGELOG entries from `[Unreleased]`** into a new section:
 
@@ -78,7 +103,7 @@ all preparation steps are manual.
 
    ```bash
    python -m venv /tmp/st-release-verify
-   /tmp/st-release-verify/bin/pip install "dist/subtitle_translator-X.Y.Z-*.whl[all]"
+   /tmp/st-release-verify/bin/pip install "dist/subtranslate_ai-X.Y.Z-*.whl[all]"
    cd /tmp
    /tmp/st-release-verify/bin/subtitle-translator --version
    /tmp/st-release-verify/bin/subtitle-translator --help
@@ -106,7 +131,7 @@ all preparation steps are manual.
 12. **Verify package name and ownership on PyPI.**
 
     - Log in to <https://pypi.org> and confirm that you own or can create the
-      `subtitle-translator` project.
+      `subtranslate-ai` project.
     - Optionally test on TestPyPI first: <https://test.pypi.org>.
 
 13. **Verify Trusted Publisher configuration on PyPI.**
@@ -151,14 +176,14 @@ all preparation steps are manual.
    and builds the distribution; the publish job uploads it to PyPI after
    approval.
 
-6. **Verify the PyPI page** at <https://pypi.org/project/subtitle-translator/>.
+6. **Verify the PyPI page** at <https://pypi.org/project/subtranslate-ai/>.
    Confirm the version, description, and metadata are correct.
 
 7. **Install the published version into a clean environment:**
 
    ```bash
    python -m venv /tmp/st-published
-   /tmp/st-published/bin/pip install "subtitle-translator[all]==X.Y.Z"
+   /tmp/st-published/bin/pip install "subtranslate-ai[all]==X.Y.Z"
    /tmp/st-published/bin/subtitle-translator --version
    ```
 
@@ -186,7 +211,7 @@ all preparation steps are manual.
    consider yanking the release on PyPI:
    ```
    pip install twine
-   twine yank subtitle-translator X.Y.Z
+   twine yank subtranslate-ai X.Y.Z
    ```
 
 ---
@@ -308,7 +333,7 @@ subtitle-translator review \
   functional private reporting channel.
 - **PyPI Trusted Publisher:** Configure the Trusted Publisher on PyPI as
   described in step 13 of the pre-release checklist above.
-- **PyPI project name:** Verify that `subtitle-translator` is available or
+- **PyPI project name:** Verify that `subtranslate-ai` is available or
   already owned on PyPI before publishing.
 - **GitHub environment `pypi`:** Create the protected `pypi` environment in
   repository Settings → Environments and configure required reviewers before

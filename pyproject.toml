@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "subtitle-translator"
+name = "subtranslate-ai"
 version = "0.1.0"
 description = "AI-powered subtitle translator for SRT files, supporting OpenAI and Gemini."
 readme = "README.md"
