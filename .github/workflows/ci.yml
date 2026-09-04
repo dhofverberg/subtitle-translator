@@ -81,7 +81,8 @@ jobs:
           verification_env="$RUNNER_TEMP/subtitle-translator-wheel-${{ matrix.python-version }}"
           python -m venv "$verification_env"
           wheel_path="$(realpath dist/*.whl)"
-          "$verification_env/bin/python" -m pip install "subtitle-translator[all] @ file://$wheel_path"
+          wheel_uri="$("$verification_env/bin/python" -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).as_uri())' "$wheel_path")"
+          "$verification_env/bin/python" -m pip install "subtitle-translator[all] @ $wheel_uri"
 
           cd "$RUNNER_TEMP"
           PYTHONPATH= "$verification_env/bin/python" - <<'PY'
