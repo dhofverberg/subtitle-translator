@@ -1,314 +1,627 @@
 # Subtitle Translator
 
-AI-powered subtitle translation for SRT files using OpenAI and other LLM providers.
+AI-powered subtitle translation for SRT files, supporting OpenAI and Google Gemini.
 
-> **Status:** Early development (v0.1.0)
+---
 
-## Features (planned)
+> **Status:** Pre-release (v0.1.0 — not yet published to PyPI).
+> Install from a local checkout or built wheel. See [Installation](#installation).
 
-- OpenAI GPT-5.5 support
-- Batch translation
-- Resume after interruption
-- Quality Check pass
-- Multiple AI providers
-- Rich command-line interface
+---
+
+## Key capabilities
+
+- Translates SRT subtitle files between any language pair supported by your provider
+- Preserves subtitle indices, timestamps, formatting, and line breaks
+- Supports **OpenAI** and **Google Gemini** (provider-neutral core)
+- Optional **glossary** for approved terminology
+- Optional **rolling context** for consistent terminology within a file
+- Optional **consistency report** — advisory AI review highlighting possible inconsistencies
+- **Standalone review** command for reviewing existing translated files without retranslating
+- **Cross-provider review** — translate with one provider, review with another
+- Resumes after interruption; atomic output writes; never overwrites existing files
+
+---
+
+## Requirements
+
+- Python 3.11, 3.12, or 3.13
+- At least one provider SDK installed (see [Installation](#installation)):
+  - OpenAI: `pip install "subtitle-translator[openai]"`
+  - Gemini: `pip install "subtitle-translator[gemini]"`
+- A valid API key for each provider you use
+
+---
 
 ## Installation
 
-Create a virtual environment:
+This project is not yet published on PyPI. Install from a local checkout.
 
-~~~bash
-python -m venv .venv
-~~~
-
-Activate it on macOS or Linux:
-
-~~~bash
-source .venv/bin/activate
-~~~
-
-Or activate it on Windows PowerShell:
-
-~~~powershell
-.venv\Scripts\Activate.ps1
-~~~
-
-Install the provider support you need:
-
-~~~bash
-python -m pip install -e ".[openai]"       # OpenAI translation and review
-python -m pip install -e ".[gemini]"       # Gemini translation and review
-python -m pip install -e ".[all]"          # Both providers
-python -m pip install -e ".[dev,all]"      # Both providers plus development tools
-~~~
-
-## Running
+**Clone and create a virtual environment:**
 
 ```bash
-subtitle-translator --help
+git clone https://github.com/dhofverberg/subtitle-translator.git
+cd subtitle-translator
+python -m venv .venv
 ```
 
-## Translation providers
+Activate on macOS or Linux:
 
-OpenAI is the default provider, preserving existing commands. Select Gemini
-explicitly with `--provider gemini`; provider names are case-insensitive:
+```bash
+source .venv/bin/activate
+```
 
-~~~bash
-subtitle-translator movie.srt --provider gemini \
-  --source-language English --target-language Swedish
-~~~
+Activate on Windows PowerShell:
 
-Set `GEMINI_API_KEY` to authenticate Gemini requests. `GEMINI_MODEL` optionally
-sets the default Gemini model, and `--model` overrides the selected provider's
-default for one command:
+```powershell
+.venv\Scripts\Activate.ps1
+```
 
-~~~bash
-export GEMINI_API_KEY="your_api_key_here"
-export GEMINI_MODEL="gemini-2.5-flash"
-subtitle-translator movie.srt --provider gemini --model gemini-2.5-pro
-~~~
+**Install the provider you need:**
 
-On Windows PowerShell:
+```bash
+# OpenAI only
+pip install -e ".[openai]"
 
-~~~powershell
-$env:GEMINI_API_KEY = "your_api_key_here"
-$env:GEMINI_MODEL = "gemini-2.5-flash"
-subtitle-translator movie.srt --provider gemini
-~~~
+# Gemini only
+pip install -e ".[gemini]"
 
-Model availability, cost, limits, and translation/review quality differ between
-providers. Compare both providers using representative subtitle samples for
-your language pair before selecting one for a project.
+# Both providers
+pip install -e ".[all]"
 
-Credential requirements depend on provider choices:
+# Both providers plus development tools
+pip install -e ".[all,dev]"
+```
 
-- OpenAI translation/review needs `OPENAI_API_KEY`
-- Gemini translation/review needs `GEMINI_API_KEY`
-- Mixed-provider translation+review (for example Gemini translation with OpenAI
-  review) requires both provider credentials
+**After publication** (not yet available):
 
-## Glossaries
+```bash
+# These commands will work once the package is published to PyPI:
+# pip install "subtitle-translator[openai]"
+# pip install "subtitle-translator[gemini]"
+# pip install "subtitle-translator[all]"
+```
 
-Use `--glossary PATH` to supply approved source-to-target terminology as a
-UTF-8 JSON file:
+---
 
-~~~json
-{
-  "source_language": "English",
-  "target_language": "Swedish",
-  "terms": [
-    {
-      "source": "warp drive",
-      "target": "warpdrift"
-    }
-  ]
-}
-~~~
+## Quick start
 
-The glossary languages must match the CLI source and target languages. Glossary
-entries guide the model toward consistent terminology; they are not literal
-search-and-replace rules, so normal grammar and inflection still apply.
+### OpenAI
 
-The repository includes `samples/glossary.en-sv.json`. Use it with the sample
-subtitles:
+```bash
+# Set your API key
+export OPENAI_API_KEY="your_api_key_here"   # macOS / Linux
+# $env:OPENAI_API_KEY = "your_api_key_here"  # Windows PowerShell
 
-~~~bash
-subtitle-translator samples/openai_smoke_test.srt --source-language English --target-language Swedish --glossary samples/glossary.en-sv.json
-~~~
+# Translate a subtitle file (default: English → Swedish)
+subtitle-translator translate movie.srt \
+  --source-language English \
+  --target-language French
+```
 
-## Rolling subtitle context
+Output is written to `movie.translated.srt` in the same directory.
 
-By default, each batch receives up to 10 recently translated subtitles from
-the same file as read-only context. This can help resolve pronouns, names,
-forms of address, recurring phrases, and ambiguous relationships. For example,
-an earlier English subtitle may establish that "grandmother" is the speaker's
-mother's mother and be accepted as Swedish "mormor"; a later batch can then see
-that source and translation pair when choosing the same relationship term.
+### Gemini
 
-Set the maximum number of entries with `--context-size`, or disable context
-with `--context-size 0`:
+```bash
+# Set your API key
+export GEMINI_API_KEY="your_api_key_here"   # macOS / Linux
+# $env:GEMINI_API_KEY = "your_api_key_here"  # Windows PowerShell
 
-~~~bash
-subtitle-translator samples/openai_smoke_test.srt --context-size 10
-~~~
-
-Context is limited to the current file and translation run. It is not
-persistent, does not replace an explicit glossary, and may increase provider
-input usage and cost.
-
-## Optional consistency report
-
-Use `--consistency-report PATH` to run a separate advisory review after the
-translated SRT has been saved. By default, the review provider matches the
-translation provider:
-
-~~~bash
-subtitle-translator movie.srt \
+# Translate using Gemini
+subtitle-translator translate movie.srt \
   --provider gemini \
   --source-language English \
-  --target-language Swedish \
+  --target-language French
+```
+
+---
+
+## Provider configuration
+
+### Selecting a provider
+
+Use `--provider` to choose the translation provider. The default is `openai`.
+Provider names are case-insensitive.
+
+```bash
+subtitle-translator translate movie.srt --provider gemini ...
+```
+
+### Environment variables
+
+| Variable | Provider | Purpose |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI | API authentication (required) |
+| `OPENAI_MODEL` | OpenAI | Default translation model |
+| `OPENAI_REVIEW_MODEL` | OpenAI | Default consistency-review model |
+| `GEMINI_API_KEY` | Gemini | API authentication (required) |
+| `GEMINI_MODEL` | Gemini | Default translation model |
+| `GEMINI_REVIEW_MODEL` | Gemini | Default consistency-review model |
+
+### Default models
+
+The default models are defined in the application configuration. They may
+change between releases. Check `subtitle-translator translate --help` for the
+current defaults. Use `--model` or the environment variables above to override
+them.
+
+> **Note:** Model availability, cost, token limits, and translation quality
+> vary by provider and account type. Choose models supported by your account.
+> The tool does not fall back between providers automatically.
+
+### Overriding models
+
+Use `--model` to override the translation model for a single command:
+
+```bash
+subtitle-translator translate movie.srt --provider openai --model gpt-4o ...
+```
+
+Use `--review-model` to override only the consistency-review model:
+
+```bash
+subtitle-translator translate movie.srt \
+  --provider openai --model gpt-4o \
+  --review-provider gemini --review-model gemini-2.5-pro \
   --consistency-report movie.consistency.md
-~~~
+```
 
-Use `--review-provider` to review with a different provider than the one used
-for translation:
+### Cross-provider review
 
-~~~bash
-subtitle-translator movie.srt \
+Translate with one provider and review with another using `--review-provider`.
+Cross-provider workflows require credentials and installed extras for **both**
+providers.
+
+```bash
+subtitle-translator translate movie.srt \
   --provider gemini \
   --review-provider openai \
   --source-language English \
   --target-language Swedish \
   --consistency-report movie.consistency.md
-~~~
+```
 
-Use `--review-model` to override only the consistency-review model (independent
-from `--model`, which controls translation):
+---
 
-~~~bash
-subtitle-translator movie.srt \
-  --provider openai \
-  --model gpt-5.5 \
-  --review-provider gemini \
-  --review-model gemini-2.5-pro \
-  --consistency-report movie.consistency.md
-~~~
+## Common workflows
 
-The Markdown report highlights likely cross-subtitle inconsistencies for human
-inspection. For example, it may cite exact subtitle IDs where the same
-"grandmother" appears as both "mormor" and "farmor" and suggest checking which
-family relationship is intended.
+All examples assume the subtitle file exists and no output file exists yet.
 
-This review makes additional paid API requests. It never changes or rewrites
-the translated SRT. Findings are advisory, require manual review, and may
-include false positives.
+### Basic OpenAI translation
 
-Review quality can differ between providers. Running a second-provider review
-can catch issues that the translating provider missed, but this is not
-guaranteed.
+```bash
+subtitle-translator translate movie.srt \
+  --source-language English \
+  --target-language French
+```
 
-The three consistency features serve different purposes:
+### Basic Gemini translation
 
-- A glossary supplies explicit approved terminology.
-- Rolling context supplies recent accepted translations while translation is
-  in progress.
-- A consistency report reviews the completed translation afterward and
-  reports possible issues without applying fixes.
-
-## Standalone consistency review of existing subtitle files
-
-Use the `review` command to generate a consistency report from existing source
-and translated SRT files without re-translating. OpenAI remains the default
-review provider for backward compatibility.
-
-~~~bash
-subtitle-translator review movie.en.srt movie.sv.srt \
+```bash
+subtitle-translator translate movie.srt \
   --provider gemini \
+  --source-language English \
+  --target-language French
+```
+
+### Explicit output path
+
+```bash
+subtitle-translator translate movie.en.srt \
+  --output movie.fr.srt \
+  --source-language English \
+  --target-language French
+```
+
+### Custom batch size
+
+```bash
+subtitle-translator translate movie.srt \
+  --batch-size 10 \
+  --source-language English \
+  --target-language German
+```
+
+### Disable rolling context
+
+```bash
+subtitle-translator translate movie.srt \
+  --context-size 0 \
+  --source-language English \
+  --target-language Swedish
+```
+
+### Using a glossary
+
+```bash
+subtitle-translator translate movie.srt \
+  --glossary glossary.en-sv.json \
+  --source-language English \
+  --target-language Swedish
+```
+
+### Translation plus consistency report
+
+```bash
+subtitle-translator translate movie.srt \
   --source-language English \
   --target-language Swedish \
   --consistency-report movie.consistency.md
-~~~
+```
 
-This is useful for:
+### Standalone consistency review
 
-- Retrying a failed consistency report after the translation is complete
-- Reviewing pre-existing or external subtitle files
-- Adjusting glossary or language settings and re-running the review
+```bash
+subtitle-translator review movie.en.srt movie.sv.srt \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+```
+
+### Gemini translation with OpenAI review
+
+```bash
+subtitle-translator translate movie.srt \
+  --provider gemini \
+  --review-provider openai \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+```
+
+### OpenAI translation with Gemini review
+
+```bash
+subtitle-translator translate movie.srt \
+  --provider openai \
+  --review-provider gemini \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+```
+
+### Explicit translation and review models
+
+```bash
+subtitle-translator translate movie.srt \
+  --provider openai --model gpt-4o \
+  --review-provider gemini --review-model gemini-2.5-pro \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+```
+
+### Legacy positional syntax
+
+The original command style (without a `translate` subcommand) is preserved for
+backward compatibility:
+
+```bash
+subtitle-translator movie.srt --source-language English --target-language Swedish
+```
+
+---
+
+## Glossary
+
+A glossary supplies approved source-to-target terminology as a UTF-8 JSON file.
+
+### JSON shape
+
+```json
+{
+  "source_language": "English",
+  "target_language": "Swedish",
+  "terms": [
+    { "source": "warp drive", "target": "warpdrift" },
+    { "source": "First Officer", "target": "sekond" }
+  ]
+}
+```
+
+The `source_language` and `target_language` fields must match the
+`--source-language` and `--target-language` values you pass on the command
+line. The comparison is case-insensitive and trims whitespace.
+
+### Behavior
+
+- Glossary terms guide the model toward consistent terminology. They are not
+  literal search-and-replace rules.
+- Normal grammar and inflection apply: `"warp drive" → "warpdrift"` may still
+  appear inflected as appropriate.
+- Glossary priority is higher than rolling context: when the same concept
+  appears in both, the glossary term takes precedence.
+- Ambiguous proper nouns or relationship terms may not be resolved consistently
+  if the glossary does not explicitly cover them.
+
+### Failure behavior
+
+If the glossary file cannot be read, is not valid JSON, or has mismatched
+language fields, the command fails immediately before making any API calls.
+
+### Example
+
+```bash
+subtitle-translator translate samples/openai_smoke_test.srt \
+  --source-language English \
+  --target-language Swedish \
+  --glossary samples/glossary.en-sv.json
+```
+
+---
+
+## Rolling context
+
+Each translation batch optionally receives recently accepted translations from
+the current file as read-only reference material.
+
+- Context contains previously accepted subtitle pairs from the **current run
+  only**. It is not persistent translation memory.
+- It is read-only: the model uses it as guidance, not as a mandatory rule.
+- It is local to the current file and run. Different runs start fresh.
+- Context can help resolve pronouns, recurring names, and ambiguous relationship
+  terms. For example, if an earlier subtitle establishes "grandmother" as
+  Swedish `mormor` (mother's mother), a later batch may consistently use the
+  same term.
+- `--context-size 0` disables rolling context entirely.
+- Larger context values may increase provider input usage and cost.
+- Context does not replace an explicit glossary.
+
+```bash
+# Use a context window of 20 recently translated entries
+subtitle-translator translate movie.srt --context-size 20
+
+# Disable context
+subtitle-translator translate movie.srt --context-size 0
+```
+
+---
+
+## Consistency reports
+
+### Combined translation + review
+
+Add `--consistency-report` to generate an advisory review after translation:
+
+```bash
+subtitle-translator translate movie.srt \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+```
+
+- The review runs **after** the translated SRT has been saved.
+- The report is a Markdown file listing possible inconsistencies for human
+  inspection.
+- The review **never modifies** the translated SRT.
+- All findings are advisory. Film context may be needed to interpret them.
+  False positives are possible.
+- Review incurs **separate paid API calls**.
+
+### Example finding
+
+A report might note that the English word "grandmother" appears in subtitles
+10, 20, and 30, translated as Swedish `farmor` (father's mother) in some places
+and `mormor` (mother's mother) in others, and ask whether the references all
+concern the same person. This is not a claim that an error was made — it is a
+prompt for the user to verify.
+
+### Review failure
+
+If the review fails after translation, the translated SRT is **preserved**. The
+review failure is reported as an error. Use the standalone `review` command to
+retry the review later.
+
+---
+
+## Standalone review
+
+Review existing SRT files without retranslating:
+
+```bash
+subtitle-translator review movie.en.srt movie.sv.srt \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+```
+
+Use `--provider` to select the review provider (default: `openai`).
 
 ### Requirements
 
-Both SRT files must have:
+Both files must have:
 
 - The same number of subtitles
 - Matching subtitle indices (IDs)
 - Identical start and end timestamps for each pair
 
-If files don't match, the command fails before making any API requests.
-
-### Glossary with standalone review
-
-Supply a glossary with `--glossary PATH` exactly as with translation:
-
-~~~bash
-subtitle-translator review movie.en.srt movie.sv.srt \
-  --source-language English \
-  --target-language Swedish \
-  --provider gemini \
-  --glossary glossary.json \
-  --consistency-report movie.consistency.md
-~~~
-
-Glossary languages must match the requested source and target languages.
-
-### Important notes
-
-- **No translation occurs** — neither source nor translated SRT is modified
-- **Additional API requests** — the review makes separate, paid provider API calls
-  for consistency analysis
-- **Advisory only** — all findings require manual review and may include false
-  positives
-- **Cannot realign subtitles** — files must already have matching structure;
-  automatic alignment is not performed
-- **No automatic corrections** — neither reviewer rewrites subtitle text
-- **Retry-friendly** — a failed review does not require retranslation; run the
-  standalone `review` command later
-
-### Review model environment variables
-
-Review model selection order is:
-
-1. `--review-model` (or `--model` for standalone `review`)
-2. Provider-specific review model environment variable
-3. Provider normal model environment variable
-4. Provider default
-
-Supported environment variables:
-
-- `OPENAI_REVIEW_MODEL`
-- `GEMINI_REVIEW_MODEL`
+If the files do not match, the command fails before making any API calls.
 
 ### Difference: translate with report vs. standalone review
 
-| Aspect | `translate --consistency-report` | `review` command |
-|--------|----------------------------------|------------------|
-| **Input** | Source SRT file (English) | Source + translated SRT files |
-| **Translation** | Yes, generates translated SRT | No, uses existing files |
-| **Review** | Yes, after translation | Yes, only |
-| **Output files** | Translated SRT + report | Report only |
-| **Failed translation** | Partial report (if not caught before save) | No translation to preserve |
-| **Use case** | Full workflow: translate and review | Retry review, external files |
+| | `translate --consistency-report` | `review` |
+|---|---|---|
+| Input | Source SRT | Source + translated SRT |
+| Translation | Yes | No |
+| Output files | Translated SRT + report | Report only |
+| Use case | Full workflow | Retry review, external files |
 
-## Manual OpenAI smoke test
+---
 
-Set your OpenAI API key in the shell. You can optionally override the default
-model with *OPENAI_MODEL*.
+## Output safety
 
-On macOS or Linux:
+- Existing output files are **not overwritten** by default. Use `--output` to
+  specify a new path.
+- Existing consistency report files are not overwritten. Specify a new path.
+- Output writes use atomic rename where the OS supports it.
+- Source SRT files are never modified.
+- If a review fails after translation, the translated SRT is preserved.
+- Keep your originals and backups regardless.
 
-~~~bash
-export OPENAI_API_KEY="your_api_key_here"
-export OPENAI_MODEL="gpt-5.5"  # Optional
-~~~
+---
 
-On Windows PowerShell:
+## Cost, privacy, and API considerations
 
-~~~powershell
-$env:OPENAI_API_KEY = "your_api_key_here"
-$env:OPENAI_MODEL = "gpt-5.5"  # Optional
-~~~
+> **Important:** Subtitle text is sent to external API providers. Review these
+> considerations before translating sensitive content.
 
-Translate the included sample from English to Swedish, optionally adding
-`--glossary samples/glossary.en-sv.json`:
+- Subtitle text is transmitted to the selected provider (OpenAI or Google).
+- Glossary terms and rolling context data are also sent as part of each
+  translation request.
+- Standalone review sends both source and translated subtitle text.
+- Cross-provider workflows may send content to **two providers**.
+- You are responsible for reviewing each provider's terms of service, data
+  retention policies, data-control settings, regional requirements, and billing.
+- The tool cannot guarantee a specific cost. Batch size, context size, review
+  chunking, model choice, and subtitle length all influence token usage.
+- Transport encryption (HTTPS) does not mean your content is private. Consult
+  your provider's data-processing agreements for details.
+- The application does not log API keys. You are responsible for protecting
+  your local environment and configuration files.
 
-~~~bash
-subtitle-translator samples/openai_smoke_test.srt --source-language English --target-language Swedish
-~~~
+---
 
-The derived output is *samples/openai_smoke_test.translated.srt*. This command
-makes a real, paid OpenAI API request. Inspect the generated SRT manually and
-confirm that its indices, timestamps, line breaks, and translated text are
-correct.
+## Troubleshooting
+
+### `command not found: subtitle-translator`
+
+Ensure the virtual environment is activated and the package is installed:
+
+```bash
+pip show subtitle-translator
+subtitle-translator --help
+```
+
+### Missing provider SDK
+
+```
+Error: OpenAI support is not installed. Install subtitle-translator[openai].
+Error: Gemini support is not installed. Install subtitle-translator[gemini].
+```
+
+Install the required extra:
+
+```bash
+pip install -e ".[openai]"   # or [gemini] or [all]
+```
+
+### Missing API key
+
+OpenAI requires `OPENAI_API_KEY`. Gemini requires `GEMINI_API_KEY`.
+
+```bash
+# macOS / Linux
+export OPENAI_API_KEY="your_key_here"
+export GEMINI_API_KEY="your_key_here"
+
+# Windows PowerShell
+$env:OPENAI_API_KEY = "your_key_here"
+$env:GEMINI_API_KEY = "your_key_here"
+```
+
+### Invalid or unavailable model
+
+Check that the model name is correct and available on your account. Use
+`--model` to override the default.
+
+### Output file already exists
+
+```
+Error: Output file already exists: movie.translated.srt
+```
+
+Delete the existing file or specify a different output path with `--output`.
+
+### Consistency report already exists
+
+```
+Error: Consistency report already exists: movie.consistency.md
+```
+
+Delete the existing report or specify a new path.
+
+### Glossary language mismatch
+
+Ensure `source_language` and `target_language` in your glossary JSON match
+the `--source-language` and `--target-language` values exactly
+(case-insensitive).
+
+### Incompatible source and translated files in standalone review
+
+Both files must have the same subtitle count, matching IDs, and identical
+timestamps for each entry.
+
+### Provider returned an invalid or blocked response
+
+Try a smaller batch size (`--batch-size`) or check your provider's content
+moderation settings.
+
+### Translation succeeded but review failed
+
+The translated SRT is preserved. Retry the review with the `review` command:
+
+```bash
+subtitle-translator review movie.en.srt movie.translated.srt \
+  --source-language English \
+  --target-language Swedish \
+  --consistency-report movie.consistency.md
+```
+
+### Unicode display in the terminal
+
+If translated text looks garbled in the terminal but the SRT file opens
+correctly in a text editor, this is a terminal encoding issue. Files are
+written as UTF-8 regardless of terminal display.
+
+### Getting help
+
+```bash
+subtitle-translator --help
+subtitle-translator translate --help
+subtitle-translator review --help
+subtitle-translator --version
+```
+
+---
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions.
+
+```bash
+git clone https://github.com/dhofverberg/subtitle-translator.git
+cd subtitle-translator
+python -m venv .venv
+source .venv/bin/activate          # or .venv\Scripts\Activate.ps1 on Windows
+pip install -e ".[all,dev]"
+pytest
+ruff check .
+python -m build
+python -m twine check dist/*
+```
+
+See [docs/architecture.md](docs/architecture.md) for the internal design.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Bug reports and feature requests:
+[GitHub Issues](https://github.com/dhofverberg/subtitle-translator/issues)
+
+---
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the supported-version policy and
+instructions for reporting vulnerabilities privately.
+
+---
 
 ## License
 
-MIT
+[MIT](LICENSE)
+

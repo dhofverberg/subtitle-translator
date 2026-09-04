@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "subtitle-translator"
 version = "0.1.0"
-description = "AI-powered subtitle translator."
+description = "AI-powered subtitle translator for SRT files, supporting OpenAI and Gemini."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -15,11 +15,42 @@ authors = [
     { name = "Daniel Hofverberg" }
 ]
 
+keywords = [
+    "subtitle",
+    "translation",
+    "srt",
+    "openai",
+    "gemini",
+    "ai",
+    "llm",
+    "localization",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Text Processing :: Linguistic",
+    "Topic :: Utilities",
+]
+
 dependencies = [
     "click>=8.2",
     "typer>=0.16",
     "srt>=3.5"
 ]
+
+[project.urls]
+"Homepage" = "https://github.com/dhofverberg/subtitle-translator"
+"Source" = "https://github.com/dhofverberg/subtitle-translator"
+"Bug Tracker" = "https://github.com/dhofverberg/subtitle-translator/issues"
+"Changelog" = "https://github.com/dhofverberg/subtitle-translator/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 openai = [
@@ -34,6 +65,7 @@ all = [
 ]
 dev = [
     "build>=1",
+    "packaging>=24",
     "pytest>=8",
     "ruff>=0.12"
 ]

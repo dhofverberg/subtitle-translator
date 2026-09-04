@@ -16,8 +16,11 @@ dist/
 
 # Test
 .pytest_cache/
+.pytest-tmp/
+.tmp/
 .coverage
 htmlcov/
+tmp_test.srt
 
 # Ruff
 .ruff_cache/
@@ -36,3 +39,4 @@ Thumbs.db
 
 # Manual smoke-test output
 /samples/*.translated.srt
+/samples/*.consistency.md

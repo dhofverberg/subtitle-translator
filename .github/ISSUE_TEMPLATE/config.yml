@@ -1,0 +1,7 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/dhofverberg/subtitle-translator/security/advisories/new
+    about: >
+      Report a security vulnerability privately. Do not open a public issue
+      for undisclosed vulnerabilities. See SECURITY.md for details.
