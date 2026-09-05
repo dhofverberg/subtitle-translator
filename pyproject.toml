@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -41,9 +41,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "click>=8.2",
+    "click>=8.5.0",
     "typer>=0.27.2",
-    "srt>=3.5"
+    "srt>=3.5.3"
 ]
 
 [project.urls]
@@ -64,7 +64,7 @@ all = [
     "google-genai>=1.0",
 ]
 dev = [
-    "build>=1",
+    "build>=1.6.0",
     "packaging>=24",
     "pytest>=8",
     "ruff>=0.12"
