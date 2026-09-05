@@ -85,9 +85,9 @@ all preparation steps are manual.
    ```bash
    # macOS / Linux
    python -m venv /tmp/st-release-verify
-   wheel_path="$(python -c 'from pathlib import Path; print(next(Path(\"dist\").glob(\"subtitle_translator-X.Y.Z-*.whl\")).resolve())')"
+   wheel_path="$(python -c 'from pathlib import Path; print(next(Path(\"dist\").glob(\"subtranslate_ai-X.Y.Z-*.whl\")).resolve())')"
    wheel_uri="$(python -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).as_uri())' "$wheel_path")"
-   /tmp/st-release-verify/bin/pip install "subtitle-translator[all] @ $wheel_uri"
+   /tmp/st-release-verify/bin/pip install "subtranslate-ai[all] @ $wheel_uri"
    cd /tmp
    /tmp/st-release-verify/bin/subtitle-translator --version
    /tmp/st-release-verify/bin/subtitle-translator --help
@@ -98,9 +98,9 @@ all preparation steps are manual.
    ```powershell
    # Windows PowerShell
    python -m venv "$env:TEMP\st-release-verify"
-   $wheelPath = (Get-ChildItem dist\subtitle_translator-X.Y.Z-*.whl | Select-Object -First 1).FullName
+   $wheelPath = (Get-ChildItem dist\subtranslate_ai-X.Y.Z-*.whl | Select-Object -First 1).FullName
    $wheelUri = python -c "from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_uri())" "$wheelPath"
-   & "$env:TEMP\st-release-verify\Scripts\pip.exe" install "subtitle-translator[all] @ $wheelUri"
+   & "$env:TEMP\st-release-verify\Scripts\pip.exe" install "subtranslate-ai[all] @ $wheelUri"
    cd $env:TEMP
    & "$env:TEMP\st-release-verify\Scripts\subtitle-translator.exe" --version
    & "$env:TEMP\st-release-verify\Scripts\subtitle-translator.exe" --help
@@ -128,7 +128,7 @@ all preparation steps are manual.
 12. **Verify package name and ownership on PyPI.**
 
     - Log in to <https://pypi.org> and confirm that you own or can create the
-      `subtitle-translator` project.
+      `subtranslate-ai` project.
     - Optionally test on TestPyPI first: <https://test.pypi.org>.
 
 13. **Verify Trusted Publisher configuration on PyPI.**
@@ -173,21 +173,21 @@ all preparation steps are manual.
    and builds the distribution; the publish job uploads it to PyPI after
    approval.
 
-6. **Verify the PyPI page** at <https://pypi.org/project/subtitle-translator/>.
+6. **Verify the PyPI page** at <https://pypi.org/project/subtranslate-ai/>.
    Confirm the version, description, and metadata are correct.
 
 7. **Install the published version into a clean environment:**
 
    ```bash
    python -m venv /tmp/st-published
-   /tmp/st-published/bin/pip install "subtitle-translator[all]==X.Y.Z"
+   /tmp/st-published/bin/pip install "subtranslate-ai[all]==X.Y.Z"
    /tmp/st-published/bin/subtitle-translator --version
    ```
 
    ```powershell
    # Windows PowerShell
    python -m venv "$env:TEMP\st-published"
-   & "$env:TEMP\st-published\Scripts\pip.exe" install "subtitle-translator[all]==X.Y.Z"
+   & "$env:TEMP\st-published\Scripts\pip.exe" install "subtranslate-ai[all]==X.Y.Z"
    & "$env:TEMP\st-published\Scripts\subtitle-translator.exe" --version
    ```
 
@@ -215,7 +215,7 @@ all preparation steps are manual.
    consider yanking the release on PyPI:
    ```
    pip install twine
-   twine yank subtitle-translator X.Y.Z
+   twine yank subtranslate-ai X.Y.Z
    ```
 
 ---
@@ -337,7 +337,7 @@ subtitle-translator review \
   functional private reporting channel.
 - **PyPI Trusted Publisher:** Configure the Trusted Publisher on PyPI as
   described in step 13 of the pre-release checklist above.
-- **PyPI project name:** Verify that `subtitle-translator` is available or
+- **PyPI project name:** Verify that `subtranslate-ai` is available or
   already owned on PyPI before publishing.
 - **GitHub environment `pypi`:** Create the protected `pypi` environment in
   repository Settings → Environments and configure required reviewers before

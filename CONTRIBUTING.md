@@ -83,9 +83,9 @@ tree and run the CLI:
 ```bash
 # macOS / Linux
 python -m venv /tmp/st-verify
-wheel_path="$(python -c 'from pathlib import Path; print(next(Path(\"dist\").glob(\"subtitle_translator-*.whl\")).resolve())')"
+wheel_path="$(python -c 'from pathlib import Path; print(next(Path(\"dist\").glob(\"subtranslate_ai-*.whl\")).resolve())')"
 wheel_uri="$(python -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).as_uri())' "$wheel_path")"
-/tmp/st-verify/bin/pip install "subtitle-translator[all] @ $wheel_uri"
+/tmp/st-verify/bin/pip install "subtranslate-ai[all] @ $wheel_uri"
 /tmp/st-verify/bin/subtitle-translator --version
 /tmp/st-verify/bin/subtitle-translator --help
 /tmp/st-verify/bin/subtitle-translator translate --help
@@ -95,9 +95,9 @@ wheel_uri="$(python -c 'from pathlib import Path; import sys; print(Path(sys.arg
 ```powershell
 # Windows PowerShell
 python -m venv "$env:TEMP\st-verify"
-$wheelPath = (Get-ChildItem dist\subtitle_translator-*.whl | Select-Object -First 1).FullName
+$wheelPath = (Get-ChildItem dist\subtranslate_ai-*.whl | Select-Object -First 1).FullName
 $wheelUri = python -c "from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().as_uri())" "$wheelPath"
-& "$env:TEMP\st-verify\Scripts\pip.exe" install "subtitle-translator[all] @ $wheelUri"
+& "$env:TEMP\st-verify\Scripts\pip.exe" install "subtranslate-ai[all] @ $wheelUri"
 & "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" --version
 & "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" --help
 & "$env:TEMP\st-verify\Scripts\subtitle-translator.exe" translate --help
