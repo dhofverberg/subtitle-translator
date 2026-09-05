@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-This project is currently in active pre-release development. Security fixes are
-applied to the latest unreleased code on the `main` branch.
+Version 0.9.0 will be the first public release and has not been published to
+PyPI yet. Until a stable release is published, security fixes are applied to
+the latest code on the `main` branch.
 
 Once a stable release is published, this section will be updated to list which
 versions receive security support.

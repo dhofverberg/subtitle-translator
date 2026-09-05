@@ -13,7 +13,7 @@ body:
     attributes:
       label: Package version
       description: Run `subtitle-translator --version` to find this.
-      placeholder: "0.1.0"
+      placeholder: "0.9.0"
     validations:
       required: true
 

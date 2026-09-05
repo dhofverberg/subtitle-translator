@@ -53,8 +53,8 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          wheels = list(Path("dist").glob("subtitle_translator-*.whl"))
-          sdists = list(Path("dist").glob("subtitle_translator-*.tar.gz"))
+          wheels = list(Path("dist").glob("subtranslate_ai-*.whl"))
+          sdists = list(Path("dist").glob("subtranslate_ai-*.tar.gz"))
           assert len(wheels) == 1, f"Expected exactly one wheel, found: {wheels}"
           assert len(sdists) == 1, f"Expected exactly one sdist, found: {sdists}"
           print(f"Wheel:  {wheels[0].name}")
@@ -136,7 +136,7 @@ jobs:
 
           # Read version from the installed package metadata
           from importlib.metadata import version as pkg_version
-          package_version_str = pkg_version("subtitle-translator")
+          package_version_str = pkg_version("subtranslate-ai")
           package_version = Version(package_version_str)
 
           if tag_version != package_version:
@@ -157,7 +157,7 @@ jobs:
           python -m venv "$verification_env"
           wheel_path="$(realpath dist/*.whl)"
           wheel_uri="$("$verification_env/bin/python" -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).as_uri())' "$wheel_path")"
-          "$verification_env/bin/python" -m pip install "subtitle-translator[all] @ $wheel_uri"
+          "$verification_env/bin/python" -m pip install "subtranslate-ai[all] @ $wheel_uri"
 
           cd "$RUNNER_TEMP"
           PYTHONPATH= "$verification_env/bin/python" - <<'PY'
@@ -177,7 +177,7 @@ jobs:
           assert resources.joinpath("prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("batch_prompt.txt").read_text(encoding="utf-8")
           assert resources.joinpath("consistency_prompt.txt").read_text(encoding="utf-8")
-          assert version("subtitle-translator") == subtitle_translator.__version__
+          assert version("subtranslate-ai") == subtitle_translator.__version__
 
           # Provider SDKs must not be imported for basic package import
           assert "openai" not in sys.modules
@@ -208,7 +208,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/subtitle-translator/
+      url: https://pypi.org/project/subtranslate-ai/
     permissions:
       id-token: write  # required for OIDC Trusted Publishing
 
@@ -223,8 +223,8 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          wheels = list(Path("dist").glob("subtitle_translator-*.whl"))
-          sdists = list(Path("dist").glob("subtitle_translator-*.tar.gz"))
+          wheels = list(Path("dist").glob("subtranslate_ai-*.whl"))
+          sdists = list(Path("dist").glob("subtranslate_ai-*.tar.gz"))
           assert len(wheels) == 1, f"Expected exactly one wheel, found: {wheels}"
           assert len(sdists) == 1, f"Expected exactly one sdist, found: {sdists}"
           print(f"Publishing: {wheels[0].name} and {sdists[0].name}")

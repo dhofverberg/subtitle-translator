@@ -15,6 +15,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-05
+
 ### Added
 
 - **Core translation engine** – SRT subtitle translation using LLM providers.
@@ -73,4 +75,5 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Subtitle source files are never modified by translation or review operations.
 - Consistency reports do not overwrite existing files.
 
-[Unreleased]: https://github.com/dhofverberg/subtitle-translator/compare/HEAD...HEAD
+[Unreleased]: https://github.com/dhofverberg/subtitle-translator/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/dhofverberg/subtitle-translator/releases/tag/v0.9.0
