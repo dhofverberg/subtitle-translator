@@ -4,9 +4,8 @@ AI-powered subtitle translation for SRT files, supporting OpenAI and Google Gemi
 
 ---
 
-> **Status:** Version 0.9.0 will be the first public release; PyPI publication
-> is still pending. Install from a local checkout or built wheel until it is
-> published. See [Installation](#installation).
+> **Status:** Version 0.9.0 is the first public preview release and is
+> published on PyPI. See [Installation](#installation).
 
 ---
 
@@ -36,8 +35,9 @@ AI-powered subtitle translation for SRT files, supporting OpenAI and Google Gemi
 
 ## Installation
 
-Version 0.9.0 is the upcoming first public release and has not been published
-to PyPI yet. Install from a local checkout or a built wheel until then.
+**Version 0.9.0 is published on PyPI.** You can install it directly with `pip`.
+
+For development from a source checkout, follow the local installation steps below.
 
 **Clone and create a virtual environment:**
 
@@ -75,13 +75,12 @@ pip install -e ".[all]"
 pip install -e ".[all,dev]"
 ```
 
-**After the first public release** (not yet available):
+**PyPI installation:**
 
 ```bash
-# These commands will work once the package is published to PyPI:
-# pip install "subtranslate-ai[openai]"
-# pip install "subtranslate-ai[gemini]"
-# pip install "subtranslate-ai[all]"
+pip install "subtranslate-ai[openai]"
+pip install "subtranslate-ai[gemini]"
+pip install "subtranslate-ai[all]"
 ```
 
 ---
@@ -561,68 +560,54 @@ moderation settings.
 
 ### Translation succeeded but review failed
 
-The translated SRT is preserved. Retry the review with the `review` command:
-
-```bash
-subtitle-translator review movie.en.srt movie.translated.srt \
-  --source-language English \
-  --target-language Swedish \
-  --consistency-report movie.consistency.md
-```
-
-### Unicode display in the terminal
-
-If translated text looks garbled in the terminal but the SRT file opens
-correctly in a text editor, this is a terminal encoding issue. Files are
-written as UTF-8 regardless of terminal display.
-
-### Getting help
-
-```bash
-subtitle-translator --help
-subtitle-translator translate --help
-subtitle-translator review --help
-subtitle-translator --version
-```
+The translated SRT is preserved. Use the standalone `review` command to retry
+without retranslating.
 
 ---
 
 ## Development
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for full setup instructions.
+Install development dependencies:
 
 ```bash
-git clone https://github.com/dhofverberg/subtitle-translator.git
-cd subtitle-translator
-python -m venv .venv
-source .venv/bin/activate          # or .venv\Scripts\Activate.ps1 on Windows
 pip install -e ".[all,dev]"
-pytest
-ruff check .
-python -m build
-python -m twine check dist/*
 ```
 
-See [docs/architecture.md](docs/architecture.md) for the internal design.
+Run the test suite:
+
+```bash
+pytest
+```
+
+Run linting:
+
+```bash
+ruff check .
+```
+
+Build the package:
+
+```bash
+python -m build
+```
 
 ---
 
-## Contributing
+## Release and packaging notes
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+The package distribution name is `subtranslate-ai`, while the Python import
+package remains `subtitle_translator` and the CLI command remains
+`subtitle-translator`.
 
-Bug reports and feature requests:
-[GitHub Issues](https://github.com/dhofverberg/subtitle-translator/issues)
+Do not mechanically rename the Python import or CLI to match the PyPI
+hyphenated distribution name.
 
----
+The release workflow verifies both wheel and source-distribution contents.
 
-## Security
-
-See [SECURITY.md](SECURITY.md) for the supported-version policy and
-instructions for reporting vulnerabilities privately.
+PyPI publishing uses GitHub Actions Trusted Publishing (OIDC).
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+MIT License. See [LICENSE](LICENSE).
